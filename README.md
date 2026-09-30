@@ -114,3 +114,7 @@ mcp/      MCP server (stdio)
 web/      React + Cytoscape.js frontend
 examples/ sample graphs
 ```
+
+## License
+
+[MIT](LICENSE)
