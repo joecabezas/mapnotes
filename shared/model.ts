@@ -67,8 +67,13 @@ export interface NodeStyle {
   textColor?: string;
   shape?: NodeShape;
   size?: number;
-  /** svgl icon drawn inside the node: its library file name, e.g. "slack" or "github_dark" (see svgl.app). */
+  /**
+   * Icon drawn inside the node: an svgl logo by its library file name ("slack",
+   * "github_dark"; see svgl.app) or a Lucide icon as "lucide:<name>" (see lucide.dev).
+   */
   icon?: string;
+  /** Color of single-color (Lucide) icons; defaults to black or white to suit the fill. */
+  iconColor?: string;
   /** Icon size as a percentage of the node (default 70). */
   iconSize?: number;
 }
@@ -145,10 +150,10 @@ function stripUndefined<T extends object>(o: T): T {
   return o;
 }
 
-/** svgl icon names are file names like "github_dark" or "vite-light"; anything else is dropped. */
+/** Icon names are file names like "github_dark", optionally prefixed "lucide:"; anything else is dropped. */
 function iconName(v: unknown): string | undefined {
   const s = str(v)?.trim();
-  return s && /^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(s) ? s : undefined;
+  return s && /^(lucide:)?[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(s) ? s : undefined;
 }
 
 export function normalizeStyle(v: unknown): Style | undefined {
@@ -177,6 +182,7 @@ export function normalizeStyle(v: unknown): Style | undefined {
     shape: oneOf(v.shape, NODE_SHAPES),
     size: num(v.size),
     icon: iconName(v.icon),
+    iconColor: str(v.iconColor),
     iconSize: num(v.iconSize),
   });
 }

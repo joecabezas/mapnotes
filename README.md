@@ -42,14 +42,16 @@ Every push to `master` is built and published to GitHub Pages by `.github/workfl
 
 ### Icons
 
-Node styles can show a full-color brand logo (Slack, GitHub, Linear, Obsidian, …) inside the node. Icons come from [svgl](https://svgl.app) and are fetched at runtime from jsDelivr (pinned to svgl `5.0.0`), so nothing is stored in this repo. The canvas needs network access to show them; if an icon can't be loaded, the node is simply drawn without it.
+Node styles can show an icon inside the node, from two open icon sets. Both are fetched at runtime from jsDelivr, so nothing is stored in this repo. The canvas needs network access to show them; if an icon can't be loaded, the node is simply drawn without it.
 
-- **Pick an icon**: in **🎨 Styles**, set **Icon** to the icon's svgl file name without `.svg`, e.g. `slack`, `linear`, `obsidian`. Logos with light and dark variants have a suffix: `github_light` is the dark logo for light fills, `github_dark` is the white logo for dark fills.
-- **Find a name**: search svgl.app, or query the API, e.g. `https://api.svgl.app?search=notion`, and take the file name from the returned `route`.
-- **Size it**: **Icon size (%)** sets how much of the node the icon fills (default 70).
-- **Make it readable**: logos are drawn over the node's shape and fill. A circle (`ellipse`) with a white fill works for most logos, with the brand color as the border. Pointed shapes such as `diamond` or `star` clip the logo.
+- **[Lucide](https://lucide.dev/icons)** (pinned to `lucide-static` 1.x): ~1,850 general-purpose line icons, written `lucide:<name>`, e.g. `lucide:folder`, `lucide:bug`. They're drawn in one color: black or white to suit the node's fill, or **Icon color** to choose.
+- **[svgl](https://svgl.app)** (pinned to svgl `5.0.0`): full-color brand logos, written as the svgl file name, e.g. `slack`, `linear`, `obsidian`. Logos with light and dark variants have a suffix: `github_light` is the dark logo for light fills, `github_dark` is the white logo for dark fills.
 
-The MCP `set_style` tool accepts the same `icon` and `iconSize` fields.
+In **🎨 Styles**, **Browse…** next to **Icon** opens a picker with a tab per set and a search box (Lucide matches names and tags, e.g. "money" finds `lucide:banknote`). You can also type a name directly. **Icon size (%)** sets how much of the node the icon fills (default 70).
+
+Icons are drawn over the node's shape and fill. A circle (`ellipse`) works best; pointed shapes such as `diamond` or `star` clip the icon. For brand logos, a white fill with the brand color as the border works for most.
+
+The MCP `set_style` tool accepts the same `icon`, `iconColor` and `iconSize` fields.
 
 ## MCP server
 
@@ -124,7 +126,8 @@ styles:                # reusable looks, referenced by id
     textColor: "#ffffff"
     shape: ellipse     # ellipse, rectangle, round-rectangle, triangle, diamond, pentagon, hexagon, octagon, star, tag, barrel
     size: 34
-    icon: github_dark  # optional, svgl icon file name (see "Icons" above)
+    icon: github_dark  # optional, svgl logo name or lucide:<name> (see "Icons" above)
+    iconColor: "#ffffff"  # optional, color of Lucide icons
     iconSize: 70       # optional, icon size as % of the node (default 70)
   - id: fixes
     target: edge

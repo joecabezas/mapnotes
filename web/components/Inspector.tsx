@@ -23,6 +23,27 @@ interface Props {
   onOpenStyles(): void;
 }
 
+/** Copies `text` to the clipboard, showing a check mark for a moment. */
+function CopyButton({ text, what }: { text: string; what: string }) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(false), 1200);
+    return () => clearTimeout(t);
+  }, [copied]);
+  return (
+    <button
+      type="button"
+      className="icon-btn"
+      data-tip={copied ? 'Copied!' : `Copy ${what}`}
+      aria-label={`Copy ${what}`}
+      onClick={() => void navigator.clipboard.writeText(text).then(() => setCopied(true))}
+    >
+      {copied ? '✓' : '⧉'}
+    </button>
+  );
+}
+
 /** Text input that commits on blur / Enter and reverts on Escape. */
 function Field(props: {
   label: string;
@@ -35,19 +56,10 @@ function Field(props: {
   onCommit(v: string): boolean | void;
 }) {
   const [draft, setDraft] = useState(props.value);
-  const [copied, setCopied] = useState(false);
   useEffect(() => setDraft(props.value), [props.value]);
-  useEffect(() => {
-    if (!copied) return;
-    const t = setTimeout(() => setCopied(false), 1200);
-    return () => clearTimeout(t);
-  }, [copied]);
   const commit = () => {
     if (draft === props.value) return;
     if (props.onCommit(draft) === false) setDraft(props.value);
-  };
-  const copy = () => {
-    void navigator.clipboard.writeText(props.value).then(() => setCopied(true));
   };
   const input = (
     <input
@@ -72,15 +84,7 @@ function Field(props: {
       {props.copyable ? (
         <div className="row">
           {input}
-          <button
-            type="button"
-            className="icon-btn"
-            data-tip={copied ? 'Copied!' : `Copy ${props.label.toLowerCase()}`}
-            aria-label={`Copy ${props.label.toLowerCase()}`}
-            onClick={copy}
-          >
-            {copied ? '✓' : '⧉'}
-          </button>
+          <CopyButton text={props.value} what={props.label.toLowerCase()} />
         </div>
       ) : (
         input
@@ -293,7 +297,10 @@ function GraphPanel(p: Props) {
       <header className="panel-head">
         <span className="kind-badge graph">Graph</span>
         <div className="panel-titles">
-          <h2 title={title?.value}>{title?.value || 'Untitled graph'}</h2>
+          <div className="row">
+            <h2 title={title?.value}>{title?.value || 'Untitled graph'}</h2>
+            {title?.value && <CopyButton text={title.value} what="the graph name" />}
+          </div>
           {subtitle?.value && <p className="subtitle">{subtitle.value}</p>}
         </div>
       </header>
@@ -376,7 +383,10 @@ function MultiNodePanel({ ids, ...p }: Props & { ids: string[] }) {
         />
       </section>
       <section>
-        <h3>Selected</h3>
+        <h3>
+          Selected
+          <CopyButton text={nodes.map((n) => n.label).join('\n')} what="the selected labels, one per line" />
+        </h3>
         <ul className="link-list">
           {nodes.map((n) => (
             <li key={n.id}>

@@ -1,5 +1,6 @@
 import type { StylesheetJson } from 'cytoscape';
 import type { ArrowShape, CurveStyle, LineStyle, NodeShape, Style } from '../shared/model';
+import { iconKey } from './icons';
 
 export type ThemeName = 'dark' | 'light';
 
@@ -56,7 +57,7 @@ export const PALETTE = [
 
 type Css = Record<string, string | number>;
 
-function styleRules(s: Style, icons: Record<string, string>): Css {
+function styleRules(s: Style, icons: Record<string, string>, defaultFill: string): Css {
   const css: Css = {};
   if (s.target === 'node') {
     if (s.color) css['background-color'] = s.color;
@@ -67,7 +68,7 @@ function styleRules(s: Style, icons: Record<string, string>): Css {
       css.width = s.size;
       css.height = s.size;
     }
-    const icon = s.icon && icons[s.icon];
+    const icon = s.icon && icons[iconKey(s, defaultFill)];
     if (icon) {
       css['background-image'] = icon;
       css['background-fit'] = 'none';
@@ -149,7 +150,7 @@ export function buildStylesheet(styles: Style[], theme: ThemeName, icons: Record
     },
     ...styles.map((s) => ({
       selector: `${s.target}[styleId = ${JSON.stringify(s.id)}]`,
-      style: styleRules(s, icons),
+      style: styleRules(s, icons, c.node),
     })),
     {
       selector: 'node:selected',

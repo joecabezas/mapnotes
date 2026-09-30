@@ -1,3 +1,5 @@
+# 100-node example for trying the layouts (Smart / Force-directed).
+# Nodes have no positions, so the app lays the graph out when it's opened.
 properties:
   - key: title
     value: Layering test
@@ -66,9 +68,6 @@ nodes:
   - id: roadmap
     label: Roadmap 2026
     style: root
-    position:
-      x: 552
-      'y': 388
     properties:
       - key: owner
         value: product
@@ -77,25 +76,16 @@ nodes:
   - id: epic-1
     label: Editor
     style: epic
-    position:
-      x: 756
-      'y': 571
     properties:
       - key: status
         value: in progress
   - id: feat-1-1
     label: Inline editing
     style: feature
-    position:
-      x: 957
-      'y': 635
     properties: []
   - id: MAP-100
     label: MAP-100 Design inline editing
     style: linear
-    position:
-      x: 1143
-      'y': 448
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-100
@@ -106,9 +96,6 @@ nodes:
   - id: MAP-101
     label: MAP-101 Implement inline editing
     style: linear
-    position:
-      x: 1156
-      'y': 853
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-101
@@ -119,9 +106,6 @@ nodes:
   - id: MAP-102
     label: MAP-102 Test inline editing
     style: linear
-    position:
-      x: 841
-      'y': 832
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-102
@@ -132,16 +116,10 @@ nodes:
   - id: feat-1-2
     label: Multi-select
     style: feature
-    position:
-      x: 571
-      'y': 785
     properties: []
   - id: MAP-103
     label: MAP-103 Document multi-select
     style: linear
-    position:
-      x: 552
-      'y': 1012
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-103
@@ -152,9 +130,6 @@ nodes:
   - id: MAP-104
     label: MAP-104 Polish multi-select
     style: linear
-    position:
-      x: 718
-      'y': 673
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-104
@@ -165,9 +140,6 @@ nodes:
   - id: MAP-105
     label: MAP-105 Spike on multi-select
     style: linear
-    position:
-      x: 635
-      'y': 564
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-105
@@ -178,16 +150,10 @@ nodes:
   - id: feat-1-3
     label: Copy & paste
     style: feature
-    position:
-      x: 982
-      'y': 492
     properties: []
   - id: MAP-106
     label: MAP-106 Refactor copy & paste
     style: linear
-    position:
-      x: 1296
-      'y': 541
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-106
@@ -198,9 +164,6 @@ nodes:
   - id: MAP-107
     label: MAP-107 Measure copy & paste
     style: linear
-    position:
-      x: 939
-      'y': 261
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-107
@@ -211,9 +174,6 @@ nodes:
   - id: MAP-108
     label: MAP-108 Design copy & paste
     style: linear
-    position:
-      x: 1098
-      'y': 688
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-108
@@ -224,16 +184,10 @@ nodes:
   - id: feat-1-4
     label: Keyboard navigation
     style: feature
-    position:
-      x: 929
-      'y': 735
     properties: []
   - id: MAP-109
     label: MAP-109 Implement keyboard navigation
     style: linear
-    position:
-      x: 1128
-      'y': 575
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-109
@@ -244,9 +198,6 @@ nodes:
   - id: MAP-110
     label: MAP-110 Test keyboard navigation
     style: linear
-    position:
-      x: 1270
-      'y': 759
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-110
@@ -257,9 +208,6 @@ nodes:
   - id: MAP-111
     label: MAP-111 Document keyboard navigation
     style: linear
-    position:
-      x: 1001
-      'y': 951
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-111
@@ -270,25 +218,16 @@ nodes:
   - id: epic-2
     label: Layouts
     style: epic
-    position:
-      x: 775
-      'y': 186
     properties:
       - key: status
         value: done
   - id: feat-2-1
     label: Layered layout
     style: feature
-    position:
-      x: 1011
-      'y': 61
     properties: []
   - id: MAP-112
     label: MAP-112 Polish layered layout
     style: linear
-    position:
-      x: 1103
-      'y': -158
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-112
@@ -299,9 +238,6 @@ nodes:
   - id: MAP-113
     label: MAP-113 Spike on layered layout
     style: linear
-    position:
-      x: 1189
-      'y': 224
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-113
@@ -312,9 +248,6 @@ nodes:
   - id: MAP-114
     label: MAP-114 Refactor layered layout
     style: linear
-    position:
-      x: 788
-      'y': 60
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-114
@@ -325,16 +258,10 @@ nodes:
   - id: feat-2-2
     label: Force-directed tuning
     style: feature
-    position:
-      x: 664
-      'y': -56
     properties: []
   - id: MAP-115
     label: MAP-115 Measure force-directed tuning
     style: linear
-    position:
-      x: 903
-      'y': -208
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-115
@@ -345,9 +272,6 @@ nodes:
   - id: MAP-116
     label: MAP-116 Design force-directed tuning
     style: linear
-    position:
-      x: 496
-      'y': 148
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-116
@@ -358,9 +282,6 @@ nodes:
   - id: MAP-117
     label: MAP-117 Implement force-directed tuning
     style: linear
-    position:
-      x: 590
-      'y': -303
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-117
@@ -371,16 +292,10 @@ nodes:
   - id: feat-2-3
     label: Pinned nodes
     style: feature
-    position:
-      x: 550
-      'y': 24
     properties: []
   - id: MAP-118
     label: MAP-118 Test pinned nodes
     style: linear
-    position:
-      x: 502
-      'y': -198
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-118
@@ -391,9 +306,6 @@ nodes:
   - id: MAP-119
     label: MAP-119 Document pinned nodes
     style: linear
-    position:
-      x: 326
-      'y': 170
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-119
@@ -404,9 +316,6 @@ nodes:
   - id: MAP-120
     label: MAP-120 Polish pinned nodes
     style: linear
-    position:
-      x: 312
-      'y': 57
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-120
@@ -417,16 +326,10 @@ nodes:
   - id: feat-2-4
     label: Layout presets
     style: feature
-    position:
-      x: 960
-      'y': 162
     properties: []
   - id: MAP-121
     label: MAP-121 Spike on layout presets
     style: linear
-    position:
-      x: 1199
-      'y': 90
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-121
@@ -437,9 +340,6 @@ nodes:
   - id: MAP-122
     label: MAP-122 Refactor layout presets
     style: linear
-    position:
-      x: 1117
-      'y': 343
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-122
@@ -450,9 +350,6 @@ nodes:
   - id: MAP-123
     label: MAP-123 Measure layout presets
     style: linear
-    position:
-      x: 907
-      'y': -57
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-123
@@ -463,25 +360,16 @@ nodes:
   - id: epic-3
     label: Files & sync
     style: epic
-    position:
-      x: 515
-      'y': 681
     properties:
       - key: status
         value: planned
   - id: feat-3-1
     label: Open from disk
     style: feature
-    position:
-      x: 300
-      'y': 738
     properties: []
   - id: MAP-124
     label: MAP-124 Design open from disk
     style: linear
-    position:
-      x: 176
-      'y': 915
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-124
@@ -492,9 +380,6 @@ nodes:
   - id: MAP-125
     label: MAP-125 Implement open from disk
     style: linear
-    position:
-      x: 22
-      'y': 789
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-125
@@ -505,9 +390,6 @@ nodes:
   - id: MAP-126
     label: MAP-126 Test open from disk
     style: linear
-    position:
-      x: 167
-      'y': 571
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-126
@@ -518,16 +400,10 @@ nodes:
   - id: feat-3-2
     label: Auto-save
     style: feature
-    position:
-      x: 344
-      'y': 840
     properties: []
   - id: MAP-127
     label: MAP-127 Document auto-save
     style: linear
-    position:
-      x: 585
-      'y': 897
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-127
@@ -538,9 +414,6 @@ nodes:
   - id: MAP-128
     label: MAP-128 Polish auto-save
     style: linear
-    position:
-      x: 257
-      'y': 1034
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-128
@@ -551,9 +424,6 @@ nodes:
   - id: MAP-129
     label: MAP-129 Spike on auto-save
     style: linear
-    position:
-      x: 134
-      'y': 694
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-129
@@ -564,16 +434,10 @@ nodes:
   - id: feat-3-3
     label: Conflict handling
     style: feature
-    position:
-      x: 441
-      'y': 943
     properties: []
   - id: MAP-130
     label: MAP-130 Refactor conflict handling
     style: linear
-    position:
-      x: 832
-      'y': 1178
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-130
@@ -584,9 +448,6 @@ nodes:
   - id: MAP-131
     label: MAP-131 Measure conflict handling
     style: linear
-    position:
-      x: 281
-      'y': 1145
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-131
@@ -597,9 +458,6 @@ nodes:
   - id: MAP-132
     label: MAP-132 Design conflict handling
     style: linear
-    position:
-      x: 468
-      'y': 1219
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-132
@@ -610,16 +468,10 @@ nodes:
   - id: feat-3-4
     label: Recent files
     style: feature
-    position:
-      x: 530
-      'y': 485
     properties: []
   - id: MAP-133
     label: MAP-133 Implement recent files
     style: linear
-    position:
-      x: 772
-      'y': 331
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-133
@@ -630,9 +482,6 @@ nodes:
   - id: MAP-134
     label: MAP-134 Test recent files
     style: linear
-    position:
-      x: 563
-      'y': 268
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-134
@@ -643,9 +492,6 @@ nodes:
   - id: MAP-135
     label: MAP-135 Document recent files
     style: linear
-    position:
-      x: 373
-      'y': 351
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-135
@@ -656,25 +502,16 @@ nodes:
   - id: epic-4
     label: Integrations
     style: epic
-    position:
-      x: 246
-      'y': 287
     properties:
       - key: status
         value: in progress
   - id: feat-4-1
     label: GitHub import
     style: feature
-    position:
-      x: -23
-      'y': 163
     properties: []
   - id: MAP-136
     label: MAP-136 Polish github import
     style: linear
-    position:
-      x: -265
-      'y': 101
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-136
@@ -685,9 +522,6 @@ nodes:
   - id: MAP-137
     label: MAP-137 Spike on github import
     style: linear
-    position:
-      x: -221
-      'y': -101
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-137
@@ -698,9 +532,6 @@ nodes:
   - id: MAP-138
     label: MAP-138 Refactor github import
     style: linear
-    position:
-      x: -27
-      'y': 381
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-138
@@ -711,16 +542,10 @@ nodes:
   - id: feat-4-2
     label: Linear import
     style: feature
-    position:
-      x: 117
-      'y': 466
     properties: []
   - id: MAP-139
     label: MAP-139 Measure linear import
     style: linear
-    position:
-      x: -206
-      'y': 471
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-139
@@ -731,9 +556,6 @@ nodes:
   - id: MAP-140
     label: MAP-140 Design linear import
     style: linear
-    position:
-      x: 363
-      'y': 474
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-140
@@ -744,9 +566,6 @@ nodes:
   - id: MAP-141
     label: MAP-141 Implement linear import
     style: linear
-    position:
-      x: 385
-      'y': 594
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-141
@@ -757,16 +576,10 @@ nodes:
   - id: feat-4-3
     label: Slack unfurls
     style: feature
-    position:
-      x: 41
-      'y': 289
     properties: []
   - id: MAP-142
     label: MAP-142 Test slack unfurls
     style: linear
-    position:
-      x: -216
-      'y': 263
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-142
@@ -777,9 +590,6 @@ nodes:
   - id: MAP-143
     label: MAP-143 Document slack unfurls
     style: linear
-    position:
-      x: -4
-      'y': 53
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-143
@@ -790,9 +600,6 @@ nodes:
   - id: MAP-144
     label: MAP-144 Polish slack unfurls
     style: linear
-    position:
-      x: -31
-      'y': 530
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-144
@@ -803,16 +610,10 @@ nodes:
   - id: feat-4-4
     label: Obsidian vault links
     style: feature
-    position:
-      x: 147
-      'y': 127
     properties: []
   - id: MAP-145
     label: MAP-145 Spike on obsidian vault links
     style: linear
-    position:
-      x: 364
-      'y': -67
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-145
@@ -823,9 +624,6 @@ nodes:
   - id: MAP-146
     label: MAP-146 Refactor obsidian vault links
     style: linear
-    position:
-      x: 186
-      'y': -41
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-146
@@ -836,9 +634,6 @@ nodes:
   - id: MAP-147
     label: MAP-147 Measure obsidian vault links
     style: linear
-    position:
-      x: 10
-      'y': -129
     properties:
       - key: url
         value: https://linear.app/example/issue/MAP-147
@@ -849,9 +644,6 @@ nodes:
   - id: pr-200
     label: 'PR #200 MAP-100'
     style: pr
-    position:
-      x: 1418
-      'y': 443
     properties:
       - key: url
         value: https://github.com/example/mapnotes/pull/200
@@ -860,9 +652,6 @@ nodes:
   - id: pr-201
     label: 'PR #201 MAP-106'
     style: pr
-    position:
-      x: 1573
-      'y': 567
     properties:
       - key: url
         value: https://github.com/example/mapnotes/pull/201
@@ -871,9 +660,6 @@ nodes:
   - id: pr-202
     label: 'PR #202 MAP-112'
     style: pr
-    position:
-      x: 1163
-      'y': -359
     properties:
       - key: url
         value: https://github.com/example/mapnotes/pull/202
@@ -882,9 +668,6 @@ nodes:
   - id: pr-203
     label: 'PR #203 MAP-115'
     style: pr
-    position:
-      x: 809
-      'y': -409
     properties:
       - key: url
         value: https://github.com/example/mapnotes/pull/203
@@ -893,9 +676,6 @@ nodes:
   - id: pr-204
     label: 'PR #204 MAP-121'
     style: pr
-    position:
-      x: 1467
-      'y': 87
     properties:
       - key: url
         value: https://github.com/example/mapnotes/pull/204
@@ -904,9 +684,6 @@ nodes:
   - id: pr-205
     label: 'PR #205 MAP-127'
     style: pr
-    position:
-      x: 621
-      'y': 1188
     properties:
       - key: url
         value: https://github.com/example/mapnotes/pull/205
@@ -915,9 +692,6 @@ nodes:
   - id: pr-206
     label: 'PR #206 MAP-130'
     style: pr
-    position:
-      x: 672
-      'y': 1366
     properties:
       - key: url
         value: https://github.com/example/mapnotes/pull/206
@@ -926,9 +700,6 @@ nodes:
   - id: pr-207
     label: 'PR #207 MAP-136'
     style: pr
-    position:
-      x: -521
-      'y': 61
     properties:
       - key: url
         value: https://github.com/example/mapnotes/pull/207
@@ -937,9 +708,6 @@ nodes:
   - id: pr-208
     label: 'PR #208 MAP-142'
     style: pr
-    position:
-      x: -495
-      'y': 329
     properties:
       - key: url
         value: https://github.com/example/mapnotes/pull/208
@@ -948,9 +716,6 @@ nodes:
   - id: pr-209
     label: 'PR #209 MAP-145'
     style: pr
-    position:
-      x: 242
-      'y': -248
     properties:
       - key: url
         value: https://github.com/example/mapnotes/pull/209
@@ -959,9 +724,6 @@ nodes:
   - id: pr-210
     label: 'PR #210 MAP-103'
     style: pr
-    position:
-      x: 727
-      'y': 1101
     properties:
       - key: url
         value: https://github.com/example/mapnotes/pull/210
@@ -970,9 +732,6 @@ nodes:
   - id: pr-211
     label: 'PR #211 MAP-109'
     style: pr
-    position:
-      x: 1392
-      'y': 664
     properties:
       - key: url
         value: https://github.com/example/mapnotes/pull/211
@@ -981,9 +740,6 @@ nodes:
   - id: pr-212
     label: 'PR #212 MAP-112'
     style: pr
-    position:
-      x: 988
-      'y': -353
     properties:
       - key: url
         value: https://github.com/example/mapnotes/pull/212
@@ -992,9 +748,6 @@ nodes:
   - id: pr-213
     label: 'PR #213 MAP-118'
     style: pr
-    position:
-      x: 397
-      'y': -395
     properties:
       - key: url
         value: https://github.com/example/mapnotes/pull/213
@@ -1003,9 +756,6 @@ nodes:
   - id: pr-214
     label: 'PR #214 MAP-124'
     style: pr
-    position:
-      x: -71
-      'y': 1050
     properties:
       - key: url
         value: https://github.com/example/mapnotes/pull/214
@@ -1014,9 +764,6 @@ nodes:
   - id: pr-215
     label: 'PR #215 MAP-127'
     style: pr
-    position:
-      x: 604
-      'y': 1091
     properties:
       - key: url
         value: https://github.com/example/mapnotes/pull/215
@@ -1025,9 +772,6 @@ nodes:
   - id: pr-216
     label: 'PR #216 MAP-133'
     style: pr
-    position:
-      x: 658
-      'y': 139
     properties:
       - key: url
         value: https://github.com/example/mapnotes/pull/216
@@ -1036,9 +780,6 @@ nodes:
   - id: pr-217
     label: 'PR #217 MAP-139'
     style: pr
-    position:
-      x: -474
-      'y': 503
     properties:
       - key: url
         value: https://github.com/example/mapnotes/pull/217
@@ -1047,9 +788,6 @@ nodes:
   - id: pr-218
     label: 'PR #218 MAP-142'
     style: pr
-    position:
-      x: -479
-      'y': 200
     properties:
       - key: url
         value: https://github.com/example/mapnotes/pull/218
@@ -1058,9 +796,6 @@ nodes:
   - id: pr-219
     label: 'PR #219 MAP-100'
     style: pr
-    position:
-      x: 1389
-      'y': 316
     properties:
       - key: url
         value: https://github.com/example/mapnotes/pull/219
@@ -1069,99 +804,66 @@ nodes:
   - id: slack-1
     label: '#mapnotes: Arrow shapes?'
     style: slack
-    position:
-      x: 860
-      'y': 1037
     properties:
       - key: channel
         value: '#mapnotes'
   - id: slack-2
     label: '#mapnotes: Autosave feels slow'
     style: slack
-    position:
-      x: 1256
-      'y': 992
     properties:
       - key: channel
         value: '#mapnotes'
   - id: slack-3
     label: '#mapnotes: Import rate limits'
     style: slack
-    position:
-      x: 615
-      'y': -514
     properties:
       - key: channel
         value: '#mapnotes'
   - id: slack-4
     label: '#mapnotes: Layout jitter'
     style: slack
-    position:
-      x: -114
-      'y': 907
     properties:
       - key: channel
         value: '#mapnotes'
   - id: slack-5
     label: '#mapnotes: Undo across files'
     style: slack
-    position:
-      x: -4
-      'y': 1181
     properties:
       - key: channel
         value: '#mapnotes'
   - id: slack-6
     label: '#mapnotes: Icon licensing'
     style: slack
-    position:
-      x: -317
-      'y': 376
     properties:
       - key: channel
         value: '#mapnotes'
   - id: note-1
     label: Editing model
     style: obsidian
-    position:
-      x: 1014
-      'y': 823
     properties:
       - key: path
         value: mapnotes/editing-model.md
   - id: note-2
     label: Layout engine notes
     style: obsidian
-    position:
-      x: 745
-      'y': -245
     properties:
       - key: path
         value: mapnotes/layout-engine-notes.md
   - id: note-3
     label: File format v2
     style: obsidian
-    position:
-      x: 438
-      'y': 1124
     properties:
       - key: path
         value: mapnotes/file-format-v2.md
   - id: note-4
     label: Sync design
     style: obsidian
-    position:
-      x: -115
-      'y': -14
     properties:
       - key: path
         value: mapnotes/sync-design.md
   - id: note-5
     label: Integration auth
     style: obsidian
-    position:
-      x: 730
-      'y': 950
     properties:
       - key: path
         value: mapnotes/integration-auth.md

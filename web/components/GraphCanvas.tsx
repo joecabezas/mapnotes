@@ -3,7 +3,7 @@ import fcose from 'cytoscape-fcose';
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import type { Graph, Position } from '../../shared/model';
 import { useIcons } from '../icons';
-import { buildStylesheet, type ThemeName } from '../theme';
+import { buildStylesheet, CANVAS_COLORS, type ThemeName } from '../theme';
 
 // Nodes and edges share one id namespace in Cytoscape, so element ids are prefixed.
 const nid = (id: string) => `n:${id}`;
@@ -290,7 +290,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
   }, []);
 
   // Keep the stylesheet in sync with graph styles, the theme and loaded icons.
-  const icons = useIcons(props.graph.styles);
+  const icons = useIcons(props.graph.styles, CANVAS_COLORS[props.theme].node);
   useEffect(() => {
     cyRef.current?.style(buildStylesheet(props.graph.styles, props.theme, icons));
   }, [props.graph.styles, props.theme, icons]);

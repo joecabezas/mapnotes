@@ -581,6 +581,9 @@ code,
 .panel-titles {
   min-width: 0;
 }
+.panel-titles .row h2 {
+  min-width: 0;
+}
 /* With a subtitle, line the badge up with the title rather than the whole block. */
 .panel-head:has(.subtitle) {
   align-items: flex-start;
@@ -925,6 +928,79 @@ code,
   align-items: center;
   justify-content: center;
 }
+/* Icon picker: spans both columns of the style editor grid. */
+.icon-picker {
+  grid-column: 1 / -1;
+}
+.icon-browser {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--canvas-bg);
+}
+.icon-browser .tabs {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.icon-browser .tab {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.icon-browser .tab.active {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.icon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.icon-choice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+}
+.icon-choice:hover {
+  border-color: var(--border);
+}
+.icon-choice.active {
+  border-color: var(--accent);
+}
+.icon-thumb {
+  width: 24px;
+  height: 24px;
+}
+.icon-thumb.mask {
+  background: var(--text);
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+}
+.error-text {
+  color: var(--danger);
+}
+
 .style-editor .panel-foot {
   padding: 0;
 }

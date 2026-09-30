@@ -12,7 +12,8 @@ import {
   uniqueId,
   upsertStyle,
 } from '../../shared/model';
-import { SVGL_SITE, useIcons } from '../icons';
+import { iconColorFor, iconKey, parseIcon, useIcons } from '../icons';
+import { IconPicker } from './IconPicker';
 import {
   CANVAS_COLORS,
   DEFAULT_ARROW,
@@ -84,25 +85,6 @@ function Select<T extends string>(props: {
   );
 }
 
-function IconInput(props: { value?: string; onChange(v: string | undefined): void }) {
-  return (
-    <label className="field" data-tip="svgl icon file name, e.g. slack, linear, obsidian, github_dark">
-      <span>
-        Icon ·{' '}
-        <a href={SVGL_SITE} target="_blank" rel="noreferrer">
-          browse
-        </a>
-      </span>
-      <input
-        className="mono"
-        value={props.value ?? ''}
-        placeholder="none"
-        onChange={(e) => props.onChange(e.target.value.trim() || undefined)}
-      />
-    </label>
-  );
-}
-
 function NumberInput(props: {
   label: string;
   value?: number;
@@ -127,10 +109,10 @@ function NumberInput(props: {
   );
 }
 
-function Preview({ style }: { style: Style }) {
-  const icons = useIcons([style]);
+function Preview({ style, defaultFill }: { style: Style; defaultFill: string }) {
+  const icons = useIcons([style], defaultFill);
   if (style.target === 'node') {
-    const icon = style.icon ? icons[style.icon] : undefined;
+    const icon = style.icon ? icons[iconKey(style, defaultFill)] : undefined;
     const size = Math.min(56, style.size ?? DEFAULT_NODE_SIZE);
     const radius: Record<string, string> = { ellipse: '50%', 'round-rectangle': '22%', barrel: '35% / 18%' };
     const clip: Record<string, string> = {
@@ -245,7 +227,7 @@ export function StylesDialog({ graph, theme, apply, onClose }: Props) {
             {selected && (
               <>
                 <div className="style-editor-head">
-                  <Preview style={selected} />
+                  <Preview style={selected} defaultFill={colors.node} />
                   <div className="grow">
                     <label className="field" data-tip="Display name of the style">
                       <span>Name</span>
@@ -282,7 +264,16 @@ export function StylesDialog({ graph, theme, apply, onClose }: Props) {
                       />
                       <Select label="Shape" value={selected.shape} options={NODE_SHAPES} defaultValue={DEFAULT_NODE_SHAPE} tip="Node shape" onChange={(shape) => patch({ shape })} />
                       <NumberInput label="Size (px)" value={selected.size} defaultValue={DEFAULT_NODE_SIZE} min={8} max={300} tip="Node diameter" onChange={(size) => patch({ size })} />
-                      <IconInput value={selected.icon} onChange={(icon) => patch({ icon })} />
+                      <IconPicker value={selected.icon} onChange={(icon) => patch({ icon })} />
+                      {selected.icon && parseIcon(selected.icon).source === 'lucide' && (
+                        <ColorInput
+                          label="Icon color"
+                          value={selected.iconColor}
+                          defaultValue={iconColorFor({ ...selected, iconColor: undefined }, colors.node)}
+                          tip="Color of the icon; by default black or white to suit the fill"
+                          onChange={(iconColor) => patch({ iconColor })}
+                        />
+                      )}
                       <NumberInput
                         label="Icon size (%)"
                         value={selected.iconSize}

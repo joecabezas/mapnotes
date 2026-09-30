@@ -299,8 +299,9 @@ server.registerTool(
         .string()
         .optional()
         .describe(
-          'Nodes only, full-color svgl icon drawn inside the node: the svgl library file name without .svg (https://svgl.app), e.g. "slack", "linear", "github_dark"',
+          'Nodes only, icon drawn inside the node. A full-color brand logo from svgl by its library file name without .svg (https://svgl.app), e.g. "slack", "linear", "github_dark"; or a Lucide line icon as "lucide:<name>" (https://lucide.dev/icons), e.g. "lucide:folder", "lucide:bug"',
         ),
+      iconColor: z.string().optional().describe('Nodes only, color of Lucide icons (default: black or white to suit the fill)'),
       iconSize: z.number().optional().describe('Nodes only, icon size as a percentage of the node (default 70)'),
       width: z.number().optional().describe('Edges only, line width in px'),
       lineStyle: z.enum(LINE_STYLES).optional().describe('Edges only'),
