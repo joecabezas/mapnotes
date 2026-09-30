@@ -1,22 +1,49 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import sampleYaml from '../examples/pr-tracking.yaml?raw';
 import { addEdge, addNode, emptyGraph, type Graph, type Position, removeEdge, removeNode } from '../shared/model';
-import { parseGraphText, serializeGraph, serializeGraphYaml } from '../shared/yaml';
+import { formatForPath, parseGraphText, serializeGraph, serializeGraphYaml } from '../shared/yaml';
 import { GraphCanvas, type GraphCanvasHandle, LAYOUTS, type LayoutName, type Selection } from './components/GraphCanvas';
 import { HelpDialog } from './components/HelpDialog';
 import { Inspector } from './components/Inspector';
+import { PanelResizer } from './components/PanelResizer';
 import { StylesDialog } from './components/StylesDialog';
-import { fetchServerGraph, pushServerGraph, subscribeServerGraph } from './sync';
+import {
+  fileAccessSupported,
+  hasPermission,
+  pickFileToOpen,
+  pickFileToSave,
+  readHandle,
+  recallHandle,
+  rememberHandle,
+  writeHandle,
+} from './fileAccess';
 import type { ThemeName } from './theme';
 
 const LOCAL_KEY = 'mapnotes:graph';
 const THEME_KEY = 'mapnotes:theme';
+const PANEL_WIDTH_KEY = 'mapnotes:panelWidth';
+const PANEL_WIDTH_DEFAULT = 330;
+const PANEL_WIDTH_MIN = 260;
+/** The canvas always keeps at least this much room. */
+const CANVAS_MIN_WIDTH = 320;
 const HISTORY_LIMIT = 200;
 /** Edits closer together than this collapse into a single undo step. */
 const COALESCE_MS = 600;
+/** How often the open file is checked for changes made by other tools (e.g. the MCP server). */
+const FILE_POLL_MS = 1000;
+/** Edits closer together than this are written to the file once. */
+const FILE_SAVE_DELAY_MS = 300;
 
-type Mode = { kind: 'loading' } | { kind: 'file'; file: string } | { kind: 'local' };
-type SyncStatus = 'saved' | 'saving' | 'error' | 'offline';
+/**
+ * The file on disk the graph is linked to. `reconnect`: the browser remembered
+ * the file from a previous visit but needs a click to grant access again.
+ */
+type FileStatus = 'saved' | 'saving' | 'error' | 'reconnect';
+interface OpenFile {
+  handle: FileSystemFileHandle;
+  status: FileStatus;
+}
+
 interface Toast {
   id: number;
   text: string;
@@ -62,6 +89,11 @@ function fileBaseName(graph: Graph): string {
   return title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'graph';
 }
 
+/** Graph text in the format implied by the file's extension (.json or YAML). */
+function textFor(graph: Graph, fileName: string): string {
+  return serializeGraph(graph, formatForPath(fileName));
+}
+
 function isTyping(e: KeyboardEvent) {
   const t = e.target as HTMLElement;
   return t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName);
@@ -73,8 +105,10 @@ export function App() {
   const graphRef = useRef(graph);
   graphRef.current = graph;
 
-  const [mode, setMode] = useState<Mode>({ kind: 'loading' });
-  const [sync, setSync] = useState<SyncStatus>('saved');
+  const [loaded, setLoaded] = useState(false);
+  const [file, setFile] = useState<OpenFile | null>(null);
+  const fileRef = useRef(file);
+  fileRef.current = file;
   const [selection, setSelection] = useState<Selection>(null);
   const [connect, setConnect] = useState<{ source: string | null } | null>(null);
   const [theme, setTheme] = useState<ThemeName>(() => (storageGet(THEME_KEY) === 'light' ? 'light' : 'dark'));
@@ -82,13 +116,17 @@ export function App() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const [layoutName, setLayoutName] = useState<LayoutName>('cose');
+  const [layoutName, setLayoutName] = useState<LayoutName>('elk');
+  const [panelWidth, setPanelWidth] = useState(() => Number(storageGet(PANEL_WIDTH_KEY)) || PANEL_WIDTH_DEFAULT);
+  const panelMax = Math.max(PANEL_WIDTH_MIN, window.innerWidth - CANVAS_MIN_WIDTH);
 
   const canvas = useRef<GraphCanvasHandle>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const searchInput = useRef<HTMLInputElement>(null);
   const skipSave = useRef(true);
-  const lastSent = useRef<string | null>(null);
+  /** File contents as last read or written by us, to tell our own writes from other tools' edits. */
+  const fileText = useRef<string | null>(null);
+  const fileModified = useRef(0);
 
   const toast = useCallback((text: string, kind: Toast['kind'] = 'info') => {
     const id = Date.now() + Math.random();
@@ -133,74 +171,112 @@ export function App() {
     setHist((h) => (h.future.length ? { graph: h.future[0], past: [...h.past, h.graph], future: h.future.slice(1), lastAt: 0 } : h));
   }, []);
 
-  // ---- Initial load: prefer the dev server's file, fall back to local storage.
-  useEffect(() => {
-    let unsubscribe = () => {};
-    (async () => {
-      const server = await fetchServerGraph();
-      if (server) {
-        try {
-          skipSave.current = true;
-          lastSent.current = server.text;
-          setHist({ graph: parseGraphText(server.text), past: [], future: [], lastAt: 0 });
-        } catch (err) {
-          toast(`Could not read ${server.file}: ${(err as Error).message}`, 'error');
-        }
-        setMode({ kind: 'file', file: server.file });
-        unsubscribe = subscribeServerGraph(
-          (text) => {
-            if (text === lastSent.current) return;
-            try {
-              const next = parseGraphText(text);
-              lastSent.current = text;
-              setGraph(next, { fromRemote: true });
-            } catch {
-              /* ignore invalid intermediate states */
-            }
-          },
-          (online) => setSync((s) => (online ? (s === 'offline' ? 'saved' : s) : 'offline')),
-        );
-        return;
-      }
-      const stored = storageGet(LOCAL_KEY);
-      let initial = emptyGraph();
-      try {
-        initial = parseGraphText(stored ?? sampleYaml);
-      } catch {
-        initial = parseGraphText(sampleYaml);
-      }
-      skipSave.current = true;
-      setHist({ graph: initial, past: [], future: [], lastAt: 0 });
-      setMode({ kind: 'local' });
-    })();
-    return () => unsubscribe();
-  }, [setGraph, toast]);
+  /** Replaces the graph and clears undo history, without writing it back to the file. */
+  const resetGraph = useCallback((next: Graph) => {
+    skipSave.current = true;
+    graphRef.current = next;
+    setHist({ graph: next, past: [], future: [], lastAt: 0 });
+  }, []);
 
-  // ---- Persist every change (debounced).
+  /** Reads the linked file into the canvas. `fresh` (a newly opened file) also clears undo history. */
+  const loadFromFile = useCallback(
+    async (handle: FileSystemFileHandle, fresh: boolean): Promise<boolean> => {
+      try {
+        const { text, lastModified } = await readHandle(handle);
+        const next = parseGraphText(text);
+        fileText.current = text;
+        fileModified.current = lastModified;
+        if (fresh) resetGraph(next);
+        else setGraph(next, { fromRemote: true });
+        setFile({ handle, status: 'saved' });
+        return true;
+      } catch (err) {
+        toast(`Could not read ${handle.name}: ${(err as Error).message}`, 'error');
+        return false;
+      }
+    },
+    [resetGraph, setGraph, toast],
+  );
+
+  // ---- Initial load: the browser copy first, then the file linked last time (if any).
   useEffect(() => {
-    if (mode.kind === 'loading') return;
+    let initial = emptyGraph();
+    try {
+      initial = parseGraphText(storageGet(LOCAL_KEY) ?? sampleYaml);
+    } catch {
+      initial = parseGraphText(sampleYaml);
+    }
+    resetGraph(initial);
+    setLoaded(true);
+    if (!fileAccessSupported) return;
+    void (async () => {
+      const handle = await recallHandle();
+      if (!handle) return;
+      if (await hasPermission(handle)) await loadFromFile(handle, true);
+      else setFile({ handle, status: 'reconnect' });
+    })();
+  }, [loadFromFile, resetGraph]);
+
+  // ---- Keep every change in the browser, and write it to the linked file.
+  useEffect(() => {
+    if (!loaded) return;
+    storageSet(LOCAL_KEY, serializeGraphYaml(graph));
     if (skipSave.current) {
       skipSave.current = false;
       return;
     }
-    const text = serializeGraphYaml(graph);
-    if (mode.kind === 'local') {
-      storageSet(LOCAL_KEY, text);
+    const handle = fileRef.current?.status === 'reconnect' ? null : fileRef.current?.handle;
+    if (!handle) return;
+    const text = textFor(graph, handle.name);
+    if (text === fileText.current) {
+      // e.g. undone back to what's on disk while a write was still pending
+      setFile((f) => (f?.status === 'saving' ? { ...f, status: 'saved' } : f));
       return;
     }
-    setSync('saving');
+    setFile((f) => f && { ...f, status: 'saving' });
     const timer = setTimeout(async () => {
-      lastSent.current = text;
+      fileText.current = text;
       try {
-        await pushServerGraph(text);
-        setSync('saved');
+        fileModified.current = await writeHandle(handle, text);
+        setFile((f) => (f?.handle === handle ? { ...f, status: 'saved' } : f));
       } catch (err) {
-        setSync('error');
-        toast((err as Error).message, 'error');
+        setFile((f) => (f?.handle === handle ? { ...f, status: 'error' } : f));
+        toast(`Could not save ${handle.name}: ${(err as Error).message}`, 'error');
       }
-    }, 250);
+    }, FILE_SAVE_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [graph, mode, toast]);
+  }, [graph, loaded, toast]);
+
+  // ---- Pick up changes other tools (e.g. the MCP server) make to the linked file.
+  const watchedHandle = file && file.status !== 'reconnect' ? file.handle : null;
+  useEffect(() => {
+    if (!watchedHandle) return;
+    let busy = false;
+    const timer = setInterval(async () => {
+      if (busy || fileRef.current?.status === 'saving') return;
+      busy = true;
+      try {
+        const current = await watchedHandle.getFile();
+        if (current.lastModified === fileModified.current) return;
+        fileModified.current = current.lastModified;
+        const text = await current.text();
+        if (text === fileText.current) return;
+        const next = parseGraphText(text);
+        fileText.current = text;
+        setGraph(next, { fromRemote: true });
+        setFile((f) => (f?.handle === watchedHandle ? { ...f, status: 'saved' } : f));
+      } catch (err) {
+        // A half-written or invalid file is skipped until the next change; a missing one is reported once.
+        if ((err as DOMException).name === 'NotFoundError' && fileRef.current?.status !== 'error') {
+          setFile((f) => (f?.handle === watchedHandle ? { ...f, status: 'error' } : f));
+          toast(`${watchedHandle.name} was moved or deleted`, 'error');
+        }
+      } finally {
+        busy = false;
+      }
+    }, FILE_POLL_MS);
+    return () => clearInterval(timer);
+  }, [watchedHandle, setGraph, toast]);
 
   // ---- Theme.
   useEffect(() => {
@@ -273,6 +349,61 @@ export function App() {
     [setGraph, toast],
   );
 
+  /** Stops writing to the linked file; the graph stays in the browser. */
+  const closeFile = useCallback(() => {
+    setFile(null);
+    fileText.current = null;
+    void rememberHandle(null);
+  }, []);
+
+  const openAction = useCallback(async () => {
+    if (!fileAccessSupported) {
+      fileInput.current?.click();
+      return;
+    }
+    try {
+      const handle = await pickFileToOpen();
+      if (!handle || !(await loadFromFile(handle, true))) return;
+      void rememberHandle(handle);
+      setSelection(null);
+      toast(`Opened ${handle.name}: changes are saved to it automatically`);
+      setTimeout(() => canvas.current?.fit(), 50);
+    } catch (err) {
+      toast((err as Error).message, 'error');
+    }
+  }, [loadFromFile, toast]);
+
+  /** Writes the graph to a new file of the user's choice and links to it. */
+  const saveToNewFile = useCallback(async () => {
+    try {
+      const handle = await pickFileToSave(`${fileBaseName(graphRef.current)}.yaml`);
+      if (!handle) return;
+      const text = textFor(graphRef.current, handle.name);
+      fileText.current = text;
+      fileModified.current = await writeHandle(handle, text);
+      setFile({ handle, status: 'saved' });
+      void rememberHandle(handle);
+      toast(`Saved to ${handle.name}: further changes are saved automatically`);
+    } catch (err) {
+      toast((err as Error).message, 'error');
+    }
+  }, [toast]);
+
+  /** Asks again for access to the file linked on a previous visit (needs a click). */
+  const reconnectFile = useCallback(async () => {
+    const handle = fileRef.current?.handle;
+    if (!handle) return;
+    try {
+      if (!(await hasPermission(handle, true))) {
+        toast(`No access to ${handle.name}`, 'error');
+        return;
+      }
+      if (await loadFromFile(handle, false)) toast(`Reconnected to ${handle.name}`);
+    } catch (err) {
+      toast((err as Error).message, 'error');
+    }
+  }, [loadFromFile, toast]);
+
   const saveAs = useCallback(
     (format: 'yaml' | 'json' | 'png') => {
       const base = fileBaseName(graphRef.current);
@@ -287,17 +418,44 @@ export function App() {
     [],
   );
 
+  /** Ctrl+S: write the linked file now, or pick a file to save to (download where unsupported). */
+  const save = useCallback(async () => {
+    const f = fileRef.current;
+    if (!f) {
+      if (fileAccessSupported) await saveToNewFile();
+      else saveAs('yaml');
+      return;
+    }
+    if (f.status === 'reconnect') {
+      await reconnectFile();
+      return;
+    }
+    const text = textFor(graphRef.current, f.handle.name);
+    fileText.current = text;
+    try {
+      fileModified.current = await writeHandle(f.handle, text);
+      setFile((cur) => (cur?.handle === f.handle ? { ...cur, status: 'saved' } : cur));
+      toast(`Saved to ${f.handle.name}`);
+    } catch (err) {
+      setFile((cur) => (cur?.handle === f.handle ? { ...cur, status: 'error' } : cur));
+      toast(`Could not save ${f.handle.name}: ${(err as Error).message}`, 'error');
+    }
+  }, [reconnectFile, saveAs, saveToNewFile, toast]);
+
+  // New and example graphs are unlinked first, so they never overwrite the open file.
   const newGraph = useCallback(() => {
     if (graphRef.current.nodes.length && !confirm('Start a new, empty graph? (You can undo this.)')) return;
+    closeFile();
     setGraph(emptyGraph());
     setSelection(null);
-  }, [setGraph]);
+  }, [closeFile, setGraph]);
 
   const loadExample = useCallback(() => {
+    closeFile();
     setGraph(parseGraphText(sampleYaml));
     setSelection(null);
     setTimeout(() => canvas.current?.fit(), 50);
-  }, [setGraph]);
+  }, [closeFile, setGraph]);
 
   const onNodesMoved = useCallback(
     (positions: Record<string, Position>, record: boolean) => {
@@ -329,12 +487,12 @@ export function App() {
       const mod = e.ctrlKey || e.metaKey;
       if (mod && e.key.toLowerCase() === 's') {
         e.preventDefault();
-        saveAs('yaml');
+        void save();
         return;
       }
       if (mod && e.key.toLowerCase() === 'o') {
         e.preventDefault();
-        fileInput.current?.click();
+        void openAction();
         return;
       }
       if (isTyping(e)) return;
@@ -387,17 +545,7 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [addNodeInView, connect, deleteSelection, helpOpen, redo, saveAs, selection, startConnect, stylesOpen, undo]);
-
-  const syncLabel =
-    mode.kind === 'local'
-      ? { text: 'Browser only', tip: 'No file server: work is kept in this browser. Use Save to download it.' }
-      : mode.kind === 'file'
-        ? {
-            text: { saved: 'Saved', saving: 'Saving…', error: 'Save failed', offline: 'Reconnecting…' }[sync],
-            tip: `Auto-saving to ${mode.file}. Changes to the file (e.g. from the MCP server) show up live.`,
-          }
-        : { text: 'Loading…', tip: '' };
+  }, [addNodeInView, connect, deleteSelection, helpOpen, openAction, redo, save, selection, startConnect, stylesOpen, undo]);
 
   return (
     <div className="app">
@@ -410,17 +558,37 @@ export function App() {
           <button className="btn ghost" data-tip="Start a new, empty graph" onClick={newGraph}>
             New
           </button>
-          <button className="btn ghost" data-tip="Open a YAML or JSON graph file (Ctrl+O)" onClick={() => fileInput.current?.click()}>
+          <button
+            className="btn ghost"
+            data-tip={
+              fileAccessSupported
+                ? 'Open a YAML or JSON graph file; changes are saved back to it (Ctrl+O)'
+                : 'Open a YAML or JSON graph file (Ctrl+O)'
+            }
+            onClick={() => void openAction()}
+          >
             Open
           </button>
-          <button className="btn ghost" data-tip="Download the graph as YAML (Ctrl+S)" onClick={() => saveAs('yaml')}>
-            Save
-          </button>
+          {fileAccessSupported ? (
+            <button
+              className="btn ghost"
+              data-tip={file ? `Save to ${file.handle.name} (Ctrl+S)` : 'Save the graph to a file on disk (Ctrl+S)'}
+              onClick={() => void save()}
+            >
+              Save
+            </button>
+          ) : (
+            <button className="btn ghost" data-tip="Download the graph as YAML (Ctrl+S)" onClick={() => saveAs('yaml')}>
+              Download
+            </button>
+          )}
           <details className="menu">
-            <summary className="btn ghost" data-tip="More export formats" aria-label="More export formats">
+            <summary className="btn ghost" data-tip="More save and export options" aria-label="More save and export options">
               ▾
             </summary>
             <div className="menu-items" onClick={(e) => (e.currentTarget.parentElement as HTMLDetailsElement).removeAttribute('open')}>
+              {fileAccessSupported && <button onClick={() => void saveToNewFile()}>Save as…</button>}
+              {file && <button onClick={closeFile}>Close file (keep in browser)</button>}
               <button onClick={() => saveAs('yaml')}>Download YAML</button>
               <button onClick={() => saveAs('json')}>Download JSON</button>
               <button onClick={() => saveAs('png')}>Export PNG image</button>
@@ -469,7 +637,11 @@ export function App() {
             value={layoutName}
             data-tip="Automatic layout algorithm"
             aria-label="Layout algorithm"
-            onChange={(e) => setLayoutName(e.target.value as LayoutName)}
+            onChange={(e) => {
+              const name = e.target.value as LayoutName;
+              setLayoutName(name);
+              canvas.current?.runLayout(name);
+            }}
           >
             {LAYOUTS.map((l) => (
               <option key={l.name} value={l.name}>
@@ -477,8 +649,13 @@ export function App() {
               </option>
             ))}
           </select>
-          <button className="btn ghost" data-tip="Re-arrange all nodes with the chosen layout" onClick={() => canvas.current?.runLayout(layoutName)}>
-            Layout
+          <button
+            className="btn ghost icon"
+            data-tip="Run the chosen layout again"
+            aria-label="Run the layout again"
+            onClick={() => canvas.current?.runLayout(layoutName)}
+          >
+            ↻
           </button>
           <button className="btn ghost" data-tip="Fit graph to screen (F)" onClick={() => canvas.current?.fit()}>
             Fit
@@ -511,9 +688,33 @@ export function App() {
         </div>
 
         <div className="spacer" />
-        <div className={`sync ${mode.kind === 'file' ? sync : 'local'}`} data-tip={syncLabel.tip}>
-          <span className="dot" /> {syncLabel.text}
-        </div>
+        {file?.status === 'reconnect' ? (
+          <button
+            className="sync reconnect"
+            data-tip={`The browser needs your permission again to edit ${file.handle.name}`}
+            onClick={() => void reconnectFile()}
+          >
+            <span className="dot" /> Reconnect {file.handle.name}
+          </button>
+        ) : file ? (
+          <div
+            className={`sync ${file.status}`}
+            data-tip={`Changes are saved to ${file.handle.name}; edits to it from other tools (e.g. the MCP server) show up here.`}
+          >
+            <span className="dot" /> {{ saved: 'Saved', saving: 'Saving…', error: 'Save failed' }[file.status]} · {file.handle.name}
+          </div>
+        ) : (
+          <div
+            className="sync local"
+            data-tip={
+              fileAccessSupported
+                ? 'Not linked to a file: work is kept in this browser. Open a file, or Save to create one.'
+                : 'This browser cannot edit files on disk: work is kept here. Use Download to save a copy.'
+            }
+          >
+            <span className="dot" /> Browser only
+          </div>
+        )}
         <button
           className="btn ghost icon"
           data-tip={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
@@ -527,7 +728,7 @@ export function App() {
         </button>
       </header>
 
-      <main className="main">
+      <main className="main" style={{ '--inspector-width': `${Math.min(panelWidth, panelMax)}px` } as React.CSSProperties}>
         <GraphCanvas
           ref={canvas}
           graph={graph}
@@ -558,7 +759,7 @@ export function App() {
           </div>
         )}
 
-        {mode.kind !== 'loading' && graph.nodes.length === 0 && (
+        {loaded && graph.nodes.length === 0 && (
           <div className="empty">
             <h2>Your graph is empty</h2>
             <p>
@@ -568,7 +769,7 @@ export function App() {
               <button className="btn primary" onClick={addNodeInView}>
                 + Add first node
               </button>
-              <button className="btn" onClick={() => fileInput.current?.click()}>
+              <button className="btn" onClick={() => void openAction()}>
                 Open a file
               </button>
               <button className="btn ghost" onClick={loadExample}>
@@ -578,6 +779,14 @@ export function App() {
           </div>
         )}
 
+        <PanelResizer
+          width={Math.min(panelWidth, panelMax)}
+          min={PANEL_WIDTH_MIN}
+          max={panelMax}
+          defaultWidth={PANEL_WIDTH_DEFAULT}
+          onChange={setPanelWidth}
+          onCommit={(w) => storageSet(PANEL_WIDTH_KEY, String(w))}
+        />
         <aside className="inspector">
           <Inspector
             graph={graph}
@@ -594,7 +803,7 @@ export function App() {
       </main>
 
       {stylesOpen && <StylesDialog graph={graph} theme={theme} apply={apply} onClose={() => setStylesOpen(false)} />}
-      {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} fileMode={mode.kind === 'file' ? mode.file : null} />}
+      {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} fileName={file?.handle.name ?? null} />}
 
       <div className="toasts" aria-live="polite">
         {toasts.map((t) => (

@@ -1,3 +1,5 @@
+import { fileAccessSupported } from '../fileAccess';
+
 const SHORTCUTS: [string, string][] = [
   ['N', 'Add a node in the middle of the view'],
   ['Double-click canvas', 'Add a node at that spot'],
@@ -5,14 +7,14 @@ const SHORTCUTS: [string, string][] = [
   ['Del / Backspace', 'Delete the selected node or edge'],
   ['Esc', 'Cancel connect mode / clear selection'],
   ['Ctrl+Z / Ctrl+Shift+Z', 'Undo / redo'],
-  ['Ctrl+S', 'Download the graph as YAML'],
+  ['Ctrl+S', fileAccessSupported ? 'Save to the open file (or choose a new one)' : 'Download the graph as YAML'],
   ['Ctrl+O', 'Open a YAML or JSON graph file'],
   ['F', 'Fit the whole graph in view'],
   ['/', 'Search nodes'],
   ['?', 'Show this help'],
 ];
 
-export function HelpDialog({ onClose, fileMode }: { onClose(): void; fileMode: string | null }) {
+export function HelpDialog({ onClose, fileName }: { onClose(): void; fileName: string | null }) {
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal" role="dialog" aria-label="Help">
@@ -55,15 +57,20 @@ export function HelpDialog({ onClose, fileMode }: { onClose(): void; fileMode: s
             </tbody>
           </table>
           <h3>Saving</h3>
-          {fileMode ? (
+          {!fileAccessSupported ? (
             <p>
-              Changes are saved automatically to <code>{fileMode}</code>. The file is also watched, so edits made by the
-              MapNotes MCP server (or a text editor) appear here live.
+              This browser can't edit files on disk, so your work is kept in the browser. Use <em>Download</em> to save a
+              YAML file and <em>Open</em> to load one. Chrome and Edge can save to the file directly.
+            </p>
+          ) : fileName ? (
+            <p>
+              Changes are saved automatically to <code>{fileName}</code>. The file is also checked every second, so edits
+              made by the MapNotes MCP server (or a text editor) appear here live.
             </p>
           ) : (
             <p>
-              Running without the file server: your work is kept in this browser. Use <em>Save</em> to download a YAML
-              file and <em>Open</em> to load one.
+              Not linked to a file yet: your work is kept in this browser. <em>Open</em> a YAML/JSON file or use{' '}
+              <em>Save</em> to create one; from then on every change is written to it.
             </p>
           )}
         </div>

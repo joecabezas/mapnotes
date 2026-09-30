@@ -1,4 +1,5 @@
 import cytoscape, { type Core, type EventObject, type NodeSingular } from 'cytoscape';
+import fcose from 'cytoscape-fcose';
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import type { Graph, Position } from '../../shared/model';
 import { useIcons } from '../icons';
@@ -10,8 +11,19 @@ const eid = (id: string) => `e:${id}`;
 
 export type Selection = { kind: 'node' | 'edge'; id: string } | null;
 
+
+/** ELK is large (~1.5 MB), so it's only downloaded the first time the smart layout runs. */
+let elkReady: Promise<void> | null = null;
+function loadElk(): Promise<void> {
+  // @ts-expect-error cytoscape-elk ships no types; it's a standard Cytoscape extension.
+  elkReady ??= import('cytoscape-elk').then((m: { default: cytoscape.Ext }) => void cytoscape.use(m.default));
+  return elkReady;
+}
+cytoscape.use(fcose);
+
 export const LAYOUTS = [
-  { name: 'cose', label: 'Force-directed' },
+  { name: 'elk', label: 'Smart (layered)' },
+  { name: 'fcose', label: 'Force-directed' },
   { name: 'breadthfirst', label: 'Hierarchy' },
   { name: 'concentric', label: 'Concentric' },
   { name: 'circle', label: 'Circle' },
@@ -50,15 +62,96 @@ interface Hover {
 }
 
 function layoutOptions(name: LayoutName): cytoscape.LayoutOptions {
-  const common = { animate: true, animationDuration: 400, padding: 40, fit: true };
+  // Labels sit under the nodes and can be much wider than them, so every layout spaces nodes by node + label.
+  const common = { animate: true, animationDuration: 400, padding: 40, fit: true, nodeDimensionsIncludeLabels: true };
   switch (name) {
-    case 'cose':
-      return { name, ...common, nodeRepulsion: () => 9000, idealEdgeLength: () => 110, randomize: false } as cytoscape.LayoutOptions;
+    case 'elk':
+      // ELK's layered (Sugiyama) layout: parents above children, node order chosen to minimise edge
+      // crossings, each parent centred over its children.
+      return {
+        name,
+        ...common,
+        elk: {
+          algorithm: 'layered',
+          'elk.direction': 'DOWN',
+          'elk.spacing.nodeNode': 45,
+          'elk.layered.spacing.nodeNodeBetweenLayers': 60,
+          'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
+          'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
+          'elk.layered.nodePlacement.bk.fixedAlignment': 'BALANCED',
+        },
+      } as cytoscape.LayoutOptions;
+    case 'fcose':
+      // Physics simulation: nodes repel each other, edges pull their ends together like springs.
+      return {
+        name,
+        ...common,
+        quality: 'proof',
+        randomize: true,
+        nodeRepulsion: () => 20000,
+        idealEdgeLength: () => 140,
+        nodeSeparation: 120,
+        packComponents: true,
+      } as cytoscape.LayoutOptions;
     case 'breadthfirst':
       return { name, ...common, directed: true, spacingFactor: 1.2 } as cytoscape.LayoutOptions;
     default:
       return { name, ...common } as cytoscape.LayoutOptions;
   }
+}
+
+/**
+ * Every node plus one incoming edge per node (its "main parent"), found walking
+ * breadth-first from the roots. Laying out only these keeps each node next to
+ * its parent and the tree edges crossing-free; other edges (cross-links) are
+ * still drawn, they just don't pull nodes away from their parent.
+ */
+function spanningForest(cy: Core): cytoscape.CollectionReturnValue {
+  const tree = cy.collection();
+  const seen = new Set<string>();
+  const visit = (start: NodeSingular) => {
+    seen.add(start.id());
+    const queue = [start];
+    while (queue.length) {
+      queue.shift()!.outgoers('edge').forEach((edge) => {
+        const target = edge.target();
+        if (seen.has(target.id())) return;
+        seen.add(target.id());
+        tree.merge(edge);
+        queue.push(target);
+      });
+    }
+  };
+  cy.nodes().filter((n) => n.indegree(false) === 0).forEach(visit);
+  // Nodes only reachable through cycles: start from any one not placed yet.
+  cy.nodes().forEach((n) => {
+    if (!seen.has(n.id())) visit(n);
+  });
+  return cy.nodes().union(tree);
+}
+
+/**
+ * A straight edge between two nodes in the same row runs through every node in
+ * between (e.g. cross-links after the smart layout). Such edges get an `arc`
+ * (see theme.ts) that bends them above the row; other edges stay straight.
+ */
+const ARC_MAX_DY = 30;
+const ARC_MIN_DX = 100;
+function updateArcs(edges: cytoscape.EdgeCollection) {
+  edges.forEach((edge) => {
+    const s = edge.source().position();
+    const t = edge.target().position();
+    const dx = t.x - s.x;
+    const dy = t.y - s.y;
+    let arc = 0;
+    if (Math.abs(dy) < ARC_MAX_DY && Math.abs(dx) > ARC_MIN_DX) {
+      const height = Math.min(140, 30 + Math.abs(dx) * 0.08);
+      // Distances are measured to the left of the source→target direction: pick the side that is "up".
+      arc = dx > 0 ? -height : height;
+    }
+    if (arc) edge.data('arc', arc);
+    else if (edge.data('arc') !== undefined) edge.removeData('arc');
+  });
 }
 
 export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCanvas(props, ref) {
@@ -77,10 +170,12 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
     if (Object.keys(positions).length) latest.current.onNodesMoved(positions, record);
   }
 
-  function runLayout(name: LayoutName) {
+  async function runLayout(name: LayoutName) {
+    if (name === 'elk') await loadElk();
     const cy = cyRef.current;
     if (!cy || cy.nodes().empty()) return;
-    const layout = cy.layout(layoutOptions(name));
+    const eles = name === 'elk' ? spanningForest(cy) : cy.elements();
+    const layout = eles.layout(layoutOptions(name));
     layout.one('layoutstop', () => reportPositions(cy.nodes(), true));
     layout.run();
   }
@@ -129,6 +224,8 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
       if (e.target === cy) latest.current.onBackgroundDoubleTap({ ...e.position });
     });
     cy.on('dragfree', 'node', (e: EventObject) => reportPositions(e.target as NodeSingular, true));
+    cy.on('position', 'node', (e: EventObject) => updateArcs((e.target as NodeSingular).connectedEdges()));
+    cy.on('add', 'edge', (e: EventObject) => updateArcs(e.target as cytoscape.EdgeCollection));
 
     cy.on('mouseover', 'node, edge', (e: EventObject) => {
       const g = latest.current.graph;
@@ -153,7 +250,12 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
     cy.on('mouseout', 'node, edge', () => setHover(null));
     cy.on('pan zoom drag', () => setHover(null));
 
+    // Cytoscape only notices window resizes; also follow the container (e.g. when the side panel is resized).
+    const resizeObserver = new ResizeObserver(() => cy.resize());
+    if (container.current) resizeObserver.observe(container.current);
+
     return () => {
+      resizeObserver.disconnect();
       cy.destroy();
       cyRef.current = null;
     };
@@ -218,7 +320,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
     if (unplaced.length) {
       if (unplaced.length === graph.nodes.length) {
         // Nothing has a position yet: lay out the whole graph.
-        runLayout('cose');
+        runLayout('elk');
       } else {
         // Drop new nodes next to their placed neighbours, or in view.
         const center = (() => {

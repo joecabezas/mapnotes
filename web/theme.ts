@@ -137,6 +137,16 @@ export function buildStylesheet(styles: Style[], theme: ThemeName, icons: Record
         ...labelBox,
       },
     },
+    {
+      // Long edges within one row bend above it (the `arc` is set in GraphCanvas).
+      // Listed before the user styles so a style's own curve setting still wins.
+      selector: 'edge[arc]',
+      style: {
+        'curve-style': 'unbundled-bezier',
+        'control-point-distances': 'data(arc)',
+        'control-point-weights': 0.5,
+      },
+    },
     ...styles.map((s) => ({
       selector: `${s.target}[styleId = ${JSON.stringify(s.id)}]`,
       style: styleRules(s, icons),

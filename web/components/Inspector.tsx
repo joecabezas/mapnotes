@@ -283,11 +283,19 @@ function EdgePanel({ edge, ...p }: Props & { edge: GraphEdge }) {
 
 function GraphPanel(p: Props) {
   const { graph } = p;
+  const prop = (key: string) => graph.properties.find((x) => x.key === key);
+  const title = prop('title');
+  const subtitle = prop('subtitle');
+  const addProps = (keys: string[]) =>
+    p.apply((g) => editGraphProperties(g, { set: keys.map((key) => ({ key, value: '' })) }));
   return (
     <>
       <header className="panel-head">
         <span className="kind-badge graph">Graph</span>
-        <h2>{graph.properties.find((x) => x.key === 'title')?.value || 'Untitled graph'}</h2>
+        <div className="panel-titles">
+          <h2 title={title?.value}>{title?.value || 'Untitled graph'}</h2>
+          {subtitle?.value && <p className="subtitle">{subtitle.value}</p>}
+        </div>
       </header>
       <section className="stats">
         <div>
@@ -304,9 +312,20 @@ function GraphPanel(p: Props) {
         <h3>Graph properties</h3>
         <PropertyEditor
           properties={graph.properties}
-          emptyHint="Properties of the whole graph. A “title” property names the graph."
+          emptyHint="Properties of the whole graph. “title” names the graph and “subtitle” adds a line under it."
           onChange={(properties) => p.apply((g) => editGraphProperties(g, { properties }))}
         />
+        {!title ? (
+          <button className="btn small ghost" data-tip="Name the graph, with an optional line under it" onClick={() => addProps(['title', 'subtitle'])}>
+            + Title &amp; subtitle
+          </button>
+        ) : (
+          !subtitle && (
+            <button className="btn small ghost" data-tip="A line shown under the title" onClick={() => addProps(['subtitle'])}>
+              + Subtitle
+            </button>
+          )
+        )}
       </section>
       <section>
         <h3>Styles</h3>

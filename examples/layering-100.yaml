@@ -1,0 +1,1667 @@
+properties:
+  - key: title
+    value: Layering test
+  - key: subtitle
+    value: 100 nodes · roadmap → epics → features → tickets → PRs, with cross-links
+styles:
+  - id: root
+    target: node
+    name: Roadmap
+    color: '#e0af68'
+    borderColor: '#b3862f'
+    shape: star
+    size: 56
+  - id: epic
+    target: node
+    name: Epic
+    color: '#bb9af7'
+    borderColor: '#7c5fc4'
+    shape: round-rectangle
+    size: 46
+  - id: feature
+    target: node
+    name: Feature
+    color: '#7aa2f7'
+    borderColor: '#3d59a1'
+    shape: round-rectangle
+    size: 38
+  - id: linear
+    target: node
+    name: Linear ticket
+    color: '#ffffff'
+    borderColor: '#5e6ad2'
+    shape: ellipse
+    size: 40
+    icon: linear
+  - id: pr
+    target: node
+    name: Pull request
+    color: '#ffffff'
+    borderColor: '#24292f'
+    shape: ellipse
+    size: 40
+    icon: github_light
+  - id: slack
+    target: node
+    name: Slack thread
+    color: '#ffffff'
+    borderColor: '#4a154b'
+    shape: ellipse
+    size: 40
+    icon: slack
+  - id: obsidian
+    target: node
+    name: Obsidian note
+    color: '#ffffff'
+    borderColor: '#7c3aed'
+    shape: ellipse
+    size: 40
+    icon: obsidian
+  - id: blocks
+    target: edge
+    name: Blocks
+    color: '#f7768e'
+    lineStyle: dashed
+nodes:
+  - id: roadmap
+    label: Roadmap 2026
+    style: root
+    position:
+      x: 520
+      'y': -2850
+    properties:
+      - key: owner
+        value: product
+      - key: quarter
+        value: Q4
+  - id: epic-1
+    label: Editor
+    style: epic
+    position:
+      x: -3130
+      'y': -1213
+    properties:
+      - key: status
+        value: in progress
+  - id: feat-1-1
+    label: Inline editing
+    style: feature
+    position:
+      x: -4848
+      'y': 424
+    properties: []
+  - id: MAP-100
+    label: MAP-100 Design inline editing
+    style: linear
+    position:
+      x: -5338
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-100
+      - key: status
+        value: In Progress
+      - key: estimate
+        value: '8'
+  - id: MAP-101
+    label: MAP-101 Implement inline editing
+    style: linear
+    position:
+      x: -5113
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-101
+      - key: status
+        value: In Review
+      - key: estimate
+        value: '5'
+  - id: MAP-102
+    label: MAP-102 Test inline editing
+    style: linear
+    position:
+      x: -4888
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-102
+      - key: status
+        value: In Review
+      - key: estimate
+        value: '3'
+  - id: feat-1-2
+    label: Multi-select
+    style: feature
+    position:
+      x: -4132
+      'y': 424
+    properties: []
+  - id: MAP-103
+    label: MAP-103 Document multi-select
+    style: linear
+    position:
+      x: -4437
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-103
+      - key: status
+        value: Backlog
+      - key: estimate
+        value: '1'
+  - id: MAP-104
+    label: MAP-104 Polish multi-select
+    style: linear
+    position:
+      x: -4212
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-104
+      - key: status
+        value: Todo
+      - key: estimate
+        value: '2'
+  - id: MAP-105
+    label: MAP-105 Spike on multi-select
+    style: linear
+    position:
+      x: -3987
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-105
+      - key: status
+        value: Done
+      - key: estimate
+        value: '5'
+  - id: feat-1-3
+    label: Copy & paste
+    style: feature
+    position:
+      x: -3417
+      'y': 424
+    properties: []
+  - id: MAP-106
+    label: MAP-106 Refactor copy & paste
+    style: linear
+    position:
+      x: -3536
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-106
+      - key: status
+        value: In Review
+      - key: estimate
+        value: '2'
+  - id: MAP-107
+    label: MAP-107 Measure copy & paste
+    style: linear
+    position:
+      x: -3311
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-107
+      - key: status
+        value: Todo
+      - key: estimate
+        value: '1'
+  - id: MAP-108
+    label: MAP-108 Design copy & paste
+    style: linear
+    position:
+      x: -3085
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-108
+      - key: status
+        value: Done
+      - key: estimate
+        value: '8'
+  - id: feat-1-4
+    label: Keyboard navigation
+    style: feature
+    position:
+      x: -2701
+      'y': 424
+    properties: []
+  - id: MAP-109
+    label: MAP-109 Implement keyboard navigation
+    style: linear
+    position:
+      x: -2860
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-109
+      - key: status
+        value: Done
+      - key: estimate
+        value: '3'
+  - id: MAP-110
+    label: MAP-110 Test keyboard navigation
+    style: linear
+    position:
+      x: -2635
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-110
+      - key: status
+        value: Todo
+      - key: estimate
+        value: '8'
+  - id: MAP-111
+    label: MAP-111 Document keyboard navigation
+    style: linear
+    position:
+      x: -2409
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-111
+      - key: status
+        value: Backlog
+      - key: estimate
+        value: '5'
+  - id: epic-2
+    label: Layouts
+    style: epic
+    position:
+      x: -697
+      'y': -1213
+    properties:
+      - key: status
+        value: done
+  - id: feat-2-1
+    label: Layered layout
+    style: feature
+    position:
+      x: -1985
+      'y': 424
+    properties: []
+  - id: MAP-112
+    label: MAP-112 Polish layered layout
+    style: linear
+    position:
+      x: -2184
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-112
+      - key: status
+        value: Done
+      - key: estimate
+        value: '1'
+  - id: MAP-113
+    label: MAP-113 Spike on layered layout
+    style: linear
+    position:
+      x: -1959
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-113
+      - key: status
+        value: Todo
+      - key: estimate
+        value: '5'
+  - id: MAP-114
+    label: MAP-114 Refactor layered layout
+    style: linear
+    position:
+      x: -1734
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-114
+      - key: status
+        value: Backlog
+      - key: estimate
+        value: '2'
+  - id: feat-2-2
+    label: Force-directed tuning
+    style: feature
+    position:
+      x: -1270
+      'y': 424
+    properties: []
+  - id: MAP-115
+    label: MAP-115 Measure force-directed tuning
+    style: linear
+    position:
+      x: -1508
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-115
+      - key: status
+        value: In Progress
+      - key: estimate
+        value: '5'
+  - id: MAP-116
+    label: MAP-116 Design force-directed tuning
+    style: linear
+    position:
+      x: -1283
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-116
+      - key: status
+        value: Todo
+      - key: estimate
+        value: '3'
+  - id: MAP-117
+    label: MAP-117 Implement force-directed tuning
+    style: linear
+    position:
+      x: -1058
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-117
+      - key: status
+        value: Backlog
+      - key: estimate
+        value: '3'
+  - id: feat-2-3
+    label: Pinned nodes
+    style: feature
+    position:
+      x: -554
+      'y': 424
+    properties: []
+  - id: MAP-118
+    label: MAP-118 Test pinned nodes
+    style: linear
+    position:
+      x: -607
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-118
+      - key: status
+        value: In Progress
+      - key: estimate
+        value: '5'
+  - id: MAP-119
+    label: MAP-119 Document pinned nodes
+    style: linear
+    position:
+      x: -382
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-119
+      - key: status
+        value: In Review
+      - key: estimate
+        value: '8'
+  - id: MAP-120
+    label: MAP-120 Polish pinned nodes
+    style: linear
+    position:
+      x: -156
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-120
+      - key: status
+        value: Done
+      - key: estimate
+        value: '2'
+  - id: feat-2-4
+    label: Layout presets
+    style: feature
+    position:
+      x: 162
+      'y': 424
+    properties: []
+  - id: MAP-121
+    label: MAP-121 Spike on layout presets
+    style: linear
+    position:
+      x: 69
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-121
+      - key: status
+        value: Done
+      - key: estimate
+        value: '3'
+  - id: MAP-122
+    label: MAP-122 Refactor layout presets
+    style: linear
+    position:
+      x: 294
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-122
+      - key: status
+        value: Done
+      - key: estimate
+        value: '1'
+  - id: MAP-123
+    label: MAP-123 Measure layout presets
+    style: linear
+    position:
+      x: 520
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-123
+      - key: status
+        value: Done
+      - key: estimate
+        value: '2'
+  - id: epic-3
+    label: Files & sync
+    style: epic
+    position:
+      x: 1736
+      'y': -1213
+    properties:
+      - key: status
+        value: planned
+  - id: feat-3-1
+    label: Open from disk
+    style: feature
+    position:
+      x: 877
+      'y': 424
+    properties: []
+  - id: MAP-124
+    label: MAP-124 Design open from disk
+    style: linear
+    position:
+      x: 745
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-124
+      - key: status
+        value: In Progress
+      - key: estimate
+        value: '1'
+  - id: MAP-125
+    label: MAP-125 Implement open from disk
+    style: linear
+    position:
+      x: 970
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-125
+      - key: status
+        value: Backlog
+      - key: estimate
+        value: '8'
+  - id: MAP-126
+    label: MAP-126 Test open from disk
+    style: linear
+    position:
+      x: 1195
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-126
+      - key: status
+        value: Todo
+      - key: estimate
+        value: '2'
+  - id: feat-3-2
+    label: Auto-save
+    style: feature
+    position:
+      x: 1593
+      'y': 424
+    properties: []
+  - id: MAP-127
+    label: MAP-127 Document auto-save
+    style: linear
+    position:
+      x: 1421
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-127
+      - key: status
+        value: In Review
+      - key: estimate
+        value: '5'
+  - id: MAP-128
+    label: MAP-128 Polish auto-save
+    style: linear
+    position:
+      x: 1646
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-128
+      - key: status
+        value: In Progress
+      - key: estimate
+        value: '8'
+  - id: MAP-129
+    label: MAP-129 Spike on auto-save
+    style: linear
+    position:
+      x: 1871
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-129
+      - key: status
+        value: In Review
+      - key: estimate
+        value: '5'
+  - id: feat-3-3
+    label: Conflict handling
+    style: feature
+    position:
+      x: 2309
+      'y': 424
+    properties: []
+  - id: MAP-130
+    label: MAP-130 Refactor conflict handling
+    style: linear
+    position:
+      x: 2097
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-130
+      - key: status
+        value: Backlog
+      - key: estimate
+        value: '2'
+  - id: MAP-131
+    label: MAP-131 Measure conflict handling
+    style: linear
+    position:
+      x: 2322
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-131
+      - key: status
+        value: Backlog
+      - key: estimate
+        value: '8'
+  - id: MAP-132
+    label: MAP-132 Design conflict handling
+    style: linear
+    position:
+      x: 2547
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-132
+      - key: status
+        value: Done
+      - key: estimate
+        value: '2'
+  - id: feat-3-4
+    label: Recent files
+    style: feature
+    position:
+      x: 3024
+      'y': 424
+    properties: []
+  - id: MAP-133
+    label: MAP-133 Implement recent files
+    style: linear
+    position:
+      x: 2998
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-133
+      - key: status
+        value: Done
+      - key: estimate
+        value: '2'
+  - id: MAP-134
+    label: MAP-134 Test recent files
+    style: linear
+    position:
+      x: 3223
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-134
+      - key: status
+        value: In Progress
+      - key: estimate
+        value: '1'
+  - id: MAP-135
+    label: MAP-135 Document recent files
+    style: linear
+    position:
+      x: 3448
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-135
+      - key: status
+        value: Backlog
+      - key: estimate
+        value: '1'
+  - id: epic-4
+    label: Integrations
+    style: epic
+    position:
+      x: 4169
+      'y': -1213
+    properties:
+      - key: status
+        value: in progress
+  - id: feat-4-1
+    label: GitHub import
+    style: feature
+    position:
+      x: 3740
+      'y': 424
+    properties: []
+  - id: MAP-136
+    label: MAP-136 Polish github import
+    style: linear
+    position:
+      x: 3674
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-136
+      - key: status
+        value: In Progress
+      - key: estimate
+        value: '8'
+  - id: MAP-137
+    label: MAP-137 Spike on github import
+    style: linear
+    position:
+      x: 3899
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-137
+      - key: status
+        value: In Progress
+      - key: estimate
+        value: '2'
+  - id: MAP-138
+    label: MAP-138 Refactor github import
+    style: linear
+    position:
+      x: 4124
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-138
+      - key: status
+        value: Todo
+      - key: estimate
+        value: '5'
+  - id: feat-4-2
+    label: Linear import
+    style: feature
+    position:
+      x: 4456
+      'y': 424
+    properties: []
+  - id: MAP-139
+    label: MAP-139 Measure linear import
+    style: linear
+    position:
+      x: 4575
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-139
+      - key: status
+        value: In Progress
+      - key: estimate
+        value: '1'
+  - id: MAP-140
+    label: MAP-140 Design linear import
+    style: linear
+    position:
+      x: 4800
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-140
+      - key: status
+        value: In Review
+      - key: estimate
+        value: '3'
+  - id: MAP-141
+    label: MAP-141 Implement linear import
+    style: linear
+    position:
+      x: 5026
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-141
+      - key: status
+        value: Done
+      - key: estimate
+        value: '1'
+  - id: feat-4-3
+    label: Slack unfurls
+    style: feature
+    position:
+      x: 5171
+      'y': 424
+    properties: []
+  - id: MAP-142
+    label: MAP-142 Test slack unfurls
+    style: linear
+    position:
+      x: 5251
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-142
+      - key: status
+        value: In Review
+      - key: estimate
+        value: '3'
+  - id: MAP-143
+    label: MAP-143 Document slack unfurls
+    style: linear
+    position:
+      x: 5476
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-143
+      - key: status
+        value: In Review
+      - key: estimate
+        value: '5'
+  - id: MAP-144
+    label: MAP-144 Polish slack unfurls
+    style: linear
+    position:
+      x: 5701
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-144
+      - key: status
+        value: In Progress
+      - key: estimate
+        value: '3'
+  - id: feat-4-4
+    label: Obsidian vault links
+    style: feature
+    position:
+      x: 5887
+      'y': 424
+    properties: []
+  - id: MAP-145
+    label: MAP-145 Spike on obsidian vault links
+    style: linear
+    position:
+      x: 5927
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-145
+      - key: status
+        value: Todo
+      - key: estimate
+        value: '1'
+  - id: MAP-146
+    label: MAP-146 Refactor obsidian vault links
+    style: linear
+    position:
+      x: 6152
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-146
+      - key: status
+        value: Todo
+      - key: estimate
+        value: '3'
+  - id: MAP-147
+    label: MAP-147 Measure obsidian vault links
+    style: linear
+    position:
+      x: 6377
+      'y': 2061
+    properties:
+      - key: url
+        value: https://linear.app/example/issue/MAP-147
+      - key: status
+        value: Todo
+      - key: estimate
+        value: '8'
+  - id: pr-200
+    label: 'PR #200 MAP-100'
+    style: pr
+    position:
+      x: -5113
+      'y': 3698
+    properties:
+      - key: url
+        value: https://github.com/example/mapnotes/pull/200
+      - key: status
+        value: draft
+  - id: pr-201
+    label: 'PR #201 MAP-106'
+    style: pr
+    position:
+      x: -3311
+      'y': 3698
+    properties:
+      - key: url
+        value: https://github.com/example/mapnotes/pull/201
+      - key: status
+        value: merged
+  - id: pr-202
+    label: 'PR #202 MAP-112'
+    style: pr
+    position:
+      x: -1959
+      'y': 3698
+    properties:
+      - key: url
+        value: https://github.com/example/mapnotes/pull/202
+      - key: status
+        value: open
+  - id: pr-203
+    label: 'PR #203 MAP-115'
+    style: pr
+    position:
+      x: -1058
+      'y': 3698
+    properties:
+      - key: url
+        value: https://github.com/example/mapnotes/pull/203
+      - key: status
+        value: draft
+  - id: pr-204
+    label: 'PR #204 MAP-121'
+    style: pr
+    position:
+      x: 294
+      'y': 3698
+    properties:
+      - key: url
+        value: https://github.com/example/mapnotes/pull/204
+      - key: status
+        value: merged
+  - id: pr-205
+    label: 'PR #205 MAP-127'
+    style: pr
+    position:
+      x: 1646
+      'y': 3698
+    properties:
+      - key: url
+        value: https://github.com/example/mapnotes/pull/205
+      - key: status
+        value: merged
+  - id: pr-206
+    label: 'PR #206 MAP-130'
+    style: pr
+    position:
+      x: 2547
+      'y': 3698
+    properties:
+      - key: url
+        value: https://github.com/example/mapnotes/pull/206
+      - key: status
+        value: open
+  - id: pr-207
+    label: 'PR #207 MAP-136'
+    style: pr
+    position:
+      x: 3899
+      'y': 3698
+    properties:
+      - key: url
+        value: https://github.com/example/mapnotes/pull/207
+      - key: status
+        value: open
+  - id: pr-208
+    label: 'PR #208 MAP-142'
+    style: pr
+    position:
+      x: 5251
+      'y': 3698
+    properties:
+      - key: url
+        value: https://github.com/example/mapnotes/pull/208
+      - key: status
+        value: draft
+  - id: pr-209
+    label: 'PR #209 MAP-145'
+    style: pr
+    position:
+      x: 6152
+      'y': 3698
+    properties:
+      - key: url
+        value: https://github.com/example/mapnotes/pull/209
+      - key: status
+        value: merged
+  - id: pr-210
+    label: 'PR #210 MAP-103'
+    style: pr
+    position:
+      x: -4212
+      'y': 3698
+    properties:
+      - key: url
+        value: https://github.com/example/mapnotes/pull/210
+      - key: status
+        value: merged
+  - id: pr-211
+    label: 'PR #211 MAP-109'
+    style: pr
+    position:
+      x: -2860
+      'y': 3698
+    properties:
+      - key: url
+        value: https://github.com/example/mapnotes/pull/211
+      - key: status
+        value: draft
+  - id: pr-212
+    label: 'PR #212 MAP-112'
+    style: pr
+    position:
+      x: -1508
+      'y': 3698
+    properties:
+      - key: url
+        value: https://github.com/example/mapnotes/pull/212
+      - key: status
+        value: merged
+  - id: pr-213
+    label: 'PR #213 MAP-118'
+    style: pr
+    position:
+      x: -156
+      'y': 3698
+    properties:
+      - key: url
+        value: https://github.com/example/mapnotes/pull/213
+      - key: status
+        value: draft
+  - id: pr-214
+    label: 'PR #214 MAP-124'
+    style: pr
+    position:
+      x: 745
+      'y': 3698
+    properties:
+      - key: url
+        value: https://github.com/example/mapnotes/pull/214
+      - key: status
+        value: merged
+  - id: pr-215
+    label: 'PR #215 MAP-127'
+    style: pr
+    position:
+      x: 2097
+      'y': 3698
+    properties:
+      - key: url
+        value: https://github.com/example/mapnotes/pull/215
+      - key: status
+        value: open
+  - id: pr-216
+    label: 'PR #216 MAP-133'
+    style: pr
+    position:
+      x: 3448
+      'y': 3698
+    properties:
+      - key: url
+        value: https://github.com/example/mapnotes/pull/216
+      - key: status
+        value: merged
+  - id: pr-217
+    label: 'PR #217 MAP-139'
+    style: pr
+    position:
+      x: 4800
+      'y': 3698
+    properties:
+      - key: url
+        value: https://github.com/example/mapnotes/pull/217
+      - key: status
+        value: open
+  - id: pr-218
+    label: 'PR #218 MAP-142'
+    style: pr
+    position:
+      x: 5701
+      'y': 3698
+    properties:
+      - key: url
+        value: https://github.com/example/mapnotes/pull/218
+      - key: status
+        value: draft
+  - id: pr-219
+    label: 'PR #219 MAP-100'
+    style: pr
+    position:
+      x: -4662
+      'y': 3698
+    properties:
+      - key: url
+        value: https://github.com/example/mapnotes/pull/219
+      - key: status
+        value: merged
+  - id: slack-1
+    label: '#mapnotes: Arrow shapes?'
+    style: slack
+    position:
+      x: -3761
+      'y': 3698
+    properties:
+      - key: channel
+        value: '#mapnotes'
+  - id: slack-2
+    label: '#mapnotes: Autosave feels slow'
+    style: slack
+    position:
+      x: -2409
+      'y': 3698
+    properties:
+      - key: channel
+        value: '#mapnotes'
+  - id: slack-3
+    label: '#mapnotes: Import rate limits'
+    style: slack
+    position:
+      x: -607
+      'y': 3698
+    properties:
+      - key: channel
+        value: '#mapnotes'
+  - id: slack-4
+    label: '#mapnotes: Layout jitter'
+    style: slack
+    position:
+      x: 1195
+      'y': 3698
+    properties:
+      - key: channel
+        value: '#mapnotes'
+  - id: slack-5
+    label: '#mapnotes: Undo across files'
+    style: slack
+    position:
+      x: 2998
+      'y': 3698
+    properties:
+      - key: channel
+        value: '#mapnotes'
+  - id: slack-6
+    label: '#mapnotes: Icon licensing'
+    style: slack
+    position:
+      x: 4350
+      'y': 3698
+    properties:
+      - key: channel
+        value: '#mapnotes'
+  - id: note-1
+    label: Editing model
+    style: obsidian
+    position:
+      x: -4662
+      'y': 2061
+    properties:
+      - key: path
+        value: mapnotes/editing-model.md
+  - id: note-2
+    label: Layout engine notes
+    style: obsidian
+    position:
+      x: -832
+      'y': 2061
+    properties:
+      - key: path
+        value: mapnotes/layout-engine-notes.md
+  - id: note-3
+    label: File format v2
+    style: obsidian
+    position:
+      x: 2773
+      'y': 2061
+    properties:
+      - key: path
+        value: mapnotes/file-format-v2.md
+  - id: note-4
+    label: Sync design
+    style: obsidian
+    position:
+      x: 4350
+      'y': 2061
+    properties:
+      - key: path
+        value: mapnotes/sync-design.md
+  - id: note-5
+    label: Integration auth
+    style: obsidian
+    position:
+      x: -3761
+      'y': 2061
+    properties:
+      - key: path
+        value: mapnotes/integration-auth.md
+edges:
+  - id: e1
+    source: roadmap
+    target: epic-1
+    properties: []
+  - id: e2
+    source: epic-1
+    target: feat-1-1
+    properties: []
+  - id: e3
+    source: feat-1-1
+    target: MAP-100
+    properties: []
+  - id: e4
+    source: feat-1-1
+    target: MAP-101
+    properties: []
+  - id: e5
+    source: feat-1-1
+    target: MAP-102
+    properties: []
+  - id: e6
+    source: epic-1
+    target: feat-1-2
+    properties: []
+  - id: e7
+    source: feat-1-2
+    target: MAP-103
+    properties: []
+  - id: e8
+    source: feat-1-2
+    target: MAP-104
+    properties: []
+  - id: e9
+    source: feat-1-2
+    target: MAP-105
+    properties: []
+  - id: e10
+    source: epic-1
+    target: feat-1-3
+    properties: []
+  - id: e11
+    source: feat-1-3
+    target: MAP-106
+    properties: []
+  - id: e12
+    source: feat-1-3
+    target: MAP-107
+    properties: []
+  - id: e13
+    source: feat-1-3
+    target: MAP-108
+    properties: []
+  - id: e14
+    source: epic-1
+    target: feat-1-4
+    properties: []
+  - id: e15
+    source: feat-1-4
+    target: MAP-109
+    properties: []
+  - id: e16
+    source: feat-1-4
+    target: MAP-110
+    properties: []
+  - id: e17
+    source: feat-1-4
+    target: MAP-111
+    properties: []
+  - id: e18
+    source: roadmap
+    target: epic-2
+    properties: []
+  - id: e19
+    source: epic-2
+    target: feat-2-1
+    properties: []
+  - id: e20
+    source: feat-2-1
+    target: MAP-112
+    properties: []
+  - id: e21
+    source: feat-2-1
+    target: MAP-113
+    properties: []
+  - id: e22
+    source: feat-2-1
+    target: MAP-114
+    properties: []
+  - id: e23
+    source: epic-2
+    target: feat-2-2
+    properties: []
+  - id: e24
+    source: feat-2-2
+    target: MAP-115
+    properties: []
+  - id: e25
+    source: feat-2-2
+    target: MAP-116
+    properties: []
+  - id: e26
+    source: feat-2-2
+    target: MAP-117
+    properties: []
+  - id: e27
+    source: epic-2
+    target: feat-2-3
+    properties: []
+  - id: e28
+    source: feat-2-3
+    target: MAP-118
+    properties: []
+  - id: e29
+    source: feat-2-3
+    target: MAP-119
+    properties: []
+  - id: e30
+    source: feat-2-3
+    target: MAP-120
+    properties: []
+  - id: e31
+    source: epic-2
+    target: feat-2-4
+    properties: []
+  - id: e32
+    source: feat-2-4
+    target: MAP-121
+    properties: []
+  - id: e33
+    source: feat-2-4
+    target: MAP-122
+    properties: []
+  - id: e34
+    source: feat-2-4
+    target: MAP-123
+    properties: []
+  - id: e35
+    source: roadmap
+    target: epic-3
+    properties: []
+  - id: e36
+    source: epic-3
+    target: feat-3-1
+    properties: []
+  - id: e37
+    source: feat-3-1
+    target: MAP-124
+    properties: []
+  - id: e38
+    source: feat-3-1
+    target: MAP-125
+    properties: []
+  - id: e39
+    source: feat-3-1
+    target: MAP-126
+    properties: []
+  - id: e40
+    source: epic-3
+    target: feat-3-2
+    properties: []
+  - id: e41
+    source: feat-3-2
+    target: MAP-127
+    properties: []
+  - id: e42
+    source: feat-3-2
+    target: MAP-128
+    properties: []
+  - id: e43
+    source: feat-3-2
+    target: MAP-129
+    properties: []
+  - id: e44
+    source: epic-3
+    target: feat-3-3
+    properties: []
+  - id: e45
+    source: feat-3-3
+    target: MAP-130
+    properties: []
+  - id: e46
+    source: feat-3-3
+    target: MAP-131
+    properties: []
+  - id: e47
+    source: feat-3-3
+    target: MAP-132
+    properties: []
+  - id: e48
+    source: epic-3
+    target: feat-3-4
+    properties: []
+  - id: e49
+    source: feat-3-4
+    target: MAP-133
+    properties: []
+  - id: e50
+    source: feat-3-4
+    target: MAP-134
+    properties: []
+  - id: e51
+    source: feat-3-4
+    target: MAP-135
+    properties: []
+  - id: e52
+    source: roadmap
+    target: epic-4
+    properties: []
+  - id: e53
+    source: epic-4
+    target: feat-4-1
+    properties: []
+  - id: e54
+    source: feat-4-1
+    target: MAP-136
+    properties: []
+  - id: e55
+    source: feat-4-1
+    target: MAP-137
+    properties: []
+  - id: e56
+    source: feat-4-1
+    target: MAP-138
+    properties: []
+  - id: e57
+    source: epic-4
+    target: feat-4-2
+    properties: []
+  - id: e58
+    source: feat-4-2
+    target: MAP-139
+    properties: []
+  - id: e59
+    source: feat-4-2
+    target: MAP-140
+    properties: []
+  - id: e60
+    source: feat-4-2
+    target: MAP-141
+    properties: []
+  - id: e61
+    source: epic-4
+    target: feat-4-3
+    properties: []
+  - id: e62
+    source: feat-4-3
+    target: MAP-142
+    properties: []
+  - id: e63
+    source: feat-4-3
+    target: MAP-143
+    properties: []
+  - id: e64
+    source: feat-4-3
+    target: MAP-144
+    properties: []
+  - id: e65
+    source: epic-4
+    target: feat-4-4
+    properties: []
+  - id: e66
+    source: feat-4-4
+    target: MAP-145
+    properties: []
+  - id: e67
+    source: feat-4-4
+    target: MAP-146
+    properties: []
+  - id: e68
+    source: feat-4-4
+    target: MAP-147
+    properties: []
+  - id: e69
+    source: MAP-100
+    target: pr-200
+    label: implemented in
+    properties: []
+  - id: e70
+    source: MAP-106
+    target: pr-201
+    label: implemented in
+    properties: []
+  - id: e71
+    source: MAP-112
+    target: pr-202
+    label: implemented in
+    properties: []
+  - id: e72
+    source: MAP-115
+    target: pr-203
+    label: implemented in
+    properties: []
+  - id: e73
+    source: MAP-121
+    target: pr-204
+    label: implemented in
+    properties: []
+  - id: e74
+    source: MAP-127
+    target: pr-205
+    label: implemented in
+    properties: []
+  - id: e75
+    source: MAP-130
+    target: pr-206
+    label: implemented in
+    properties: []
+  - id: e76
+    source: MAP-136
+    target: pr-207
+    label: implemented in
+    properties: []
+  - id: e77
+    source: MAP-142
+    target: pr-208
+    label: implemented in
+    properties: []
+  - id: e78
+    source: MAP-145
+    target: pr-209
+    label: implemented in
+    properties: []
+  - id: e79
+    source: MAP-103
+    target: pr-210
+    label: implemented in
+    properties: []
+  - id: e80
+    source: MAP-109
+    target: pr-211
+    label: implemented in
+    properties: []
+  - id: e81
+    source: MAP-112
+    target: pr-212
+    label: implemented in
+    properties: []
+  - id: e82
+    source: MAP-118
+    target: pr-213
+    label: implemented in
+    properties: []
+  - id: e83
+    source: MAP-124
+    target: pr-214
+    label: implemented in
+    properties: []
+  - id: e84
+    source: MAP-127
+    target: pr-215
+    label: implemented in
+    properties: []
+  - id: e85
+    source: MAP-133
+    target: pr-216
+    label: implemented in
+    properties: []
+  - id: e86
+    source: MAP-139
+    target: pr-217
+    label: implemented in
+    properties: []
+  - id: e87
+    source: MAP-142
+    target: pr-218
+    label: implemented in
+    properties: []
+  - id: e88
+    source: MAP-100
+    target: pr-219
+    label: implemented in
+    properties: []
+  - id: e89
+    source: MAP-103
+    target: slack-1
+    label: discussed in
+    properties: []
+  - id: e90
+    source: MAP-110
+    target: slack-2
+    label: discussed in
+    properties: []
+  - id: e91
+    source: MAP-117
+    target: slack-3
+    label: discussed in
+    properties: []
+  - id: e92
+    source: MAP-124
+    target: slack-4
+    label: discussed in
+    properties: []
+  - id: e93
+    source: MAP-131
+    target: slack-5
+    label: discussed in
+    properties: []
+  - id: e94
+    source: MAP-138
+    target: slack-6
+    label: discussed in
+    properties: []
+  - id: e95
+    source: feat-1-1
+    target: note-1
+    label: spec
+    properties: []
+  - id: e96
+    source: feat-2-2
+    target: note-2
+    label: spec
+    properties: []
+  - id: e97
+    source: feat-3-3
+    target: note-3
+    label: spec
+    properties: []
+  - id: e98
+    source: feat-4-1
+    target: note-4
+    label: spec
+    properties: []
+  - id: e99
+    source: feat-1-2
+    target: note-5
+    label: spec
+    properties: []
+  - id: e100
+    source: MAP-100
+    target: MAP-113
+    label: blocks
+    style: blocks
+    properties: []
+  - id: e101
+    source: MAP-102
+    target: MAP-127
+    label: blocks
+    style: blocks
+    properties: []
+  - id: e102
+    source: MAP-105
+    target: MAP-140
+    label: blocks
+    style: blocks
+    properties: []
+  - id: e103
+    source: MAP-109
+    target: MAP-122
+    label: blocks
+    style: blocks
+    properties: []
+  - id: e104
+    source: MAP-114
+    target: MAP-133
+    label: blocks
+    style: blocks
+    properties: []
+  - id: e105
+    source: MAP-118
+    target: MAP-145
+    label: blocks
+    style: blocks
+    properties: []
+  - id: e106
+    source: MAP-121
+    target: MAP-107
+    label: blocks
+    style: blocks
+    properties: []
+  - id: e107
+    source: MAP-126
+    target: MAP-138
+    label: blocks
+    style: blocks
+    properties: []
+  - id: e108
+    source: MAP-130
+    target: MAP-111
+    label: blocks
+    style: blocks
+    properties: []
+  - id: e109
+    source: MAP-135
+    target: MAP-116
+    label: blocks
+    style: blocks
+    properties: []
+  - id: e110
+    source: MAP-141
+    target: MAP-104
+    label: blocks
+    style: blocks
+    properties: []
+  - id: e111
+    source: MAP-144
+    target: MAP-129
+    label: blocks
+    style: blocks
+    properties: []

@@ -1,9 +1,8 @@
 // MapNotes MCP server (stdio).
 //
-// Usage: tsx mcp/server.ts [graph.yaml]      (or MAPNOTES_FILE=graph.yaml)
+// Usage: tsx mcp/server.ts [graph.yaml]
 //
-// When a graph file is open, every change is written to it immediately, so a
-// running web app (`npm run dev`) pointed at the same file re-renders live.
+// When a graph file is open, every change is written to it immediately.
 // Before each operation the file is re-read, so edits made in the browser are
 // never overwritten with stale data.
 import path from 'node:path';
@@ -149,7 +148,9 @@ server.registerTool(
       id: z.string().optional(),
       label: z.string().optional(),
       style: z.string().optional().describe('Id of a node style from the graph styles'),
-      position: position.optional(),
+      position: position
+        .optional()
+        .describe('Usually omit: the web app places new nodes next to their neighbours, and lays out graphs that have no positions at all'),
       properties: kvList.optional(),
     },
   },
@@ -265,7 +266,7 @@ server.registerTool(
   {
     title: 'Edit graph properties',
     description:
-      'Edit the key/value properties of the graph itself. set adds/overwrites keys, remove deletes keys, properties replaces the whole list.',
+      'Edit the key/value properties of the graph itself. set adds/overwrites keys, remove deletes keys, properties replaces the whole list. "title" names the graph (keep it short) and "subtitle" is shown under it.',
     inputSchema: {
       set: kvList.optional(),
       remove: z.array(z.string()).optional(),
@@ -328,7 +329,7 @@ server.registerTool(
   }),
 );
 
-const initial = process.argv[2] ?? process.env.MAPNOTES_FILE;
+const initial = process.argv[2];
 if (initial) {
   currentFile = path.resolve(initial);
   memoryGraph = await readGraphFile(currentFile);

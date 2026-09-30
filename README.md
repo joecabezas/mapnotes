@@ -3,19 +3,22 @@
 A render engine for your own graphs. Model anything as nodes and edges (pull requests → issues → projects, services → dependencies, notes → topics…), attach key/value properties, style them, and save everything as a readable YAML file.
 
 - **Web app**: interactive canvas (drag, click to inspect, hover to preview), editing of nodes, edges, graph properties and styles (including full-color brand icons), automatic layouts, search, undo/redo, dark theme by default with a light theme toggle.
-- **MCP server**: lets an AI assistant (Claude Code, Claude Desktop, …) load, query and edit the same graph file. Changes show up live in the open web app.
+- **MCP server**: lets an AI assistant (Claude Code, Claude Desktop, …) load, query and edit a graph file. Open the same file in the web app (Chrome/Edge) to see its edits live.
 
 ## Quick start
 
 ```bash
 npm install
-npm run dev                          # opens http://localhost:5173, file: ./graph.yaml
-MAPNOTES_FILE=examples/pr-tracking.yaml npm run dev   # any other file
+npm run dev                          # dev server with hot reload at http://localhost:5173
+npm run build                        # static site in dist/
 ```
 
-The web app auto-saves every change to the file (`MAPNOTES_FILE`, default `graph.yaml`, created if missing) and watches it, so edits made by the MCP server or a text editor appear immediately.
+The web app is a static site with no backend. How it saves depends on the browser:
 
-If the app is served as static files (`npm run build`, then host `dist/`), there is no file server. Work is then kept in the browser, and you use **Open** / **Save** to load and download YAML files.
+- **Chrome, Edge and other Chromium browsers** can edit files on disk directly (File System Access API). **Open** a YAML/JSON file, or **Save** to create one, and every change is written back to that file. The file is also checked every second, so edits made by the MCP server or a text editor show up live. After a page reload the browser remembers the file but asks for permission again: click **Reconnect** in the status pill. **Close file** in the ▾ menu unlinks it; **New** and **Load example** also unlink it so they never overwrite your file.
+- **Firefox and Safari** don't support that API, so work is kept in the browser (`localStorage`). **Open** loads a file's contents, and **Download** saves a copy.
+
+In every browser the current graph is also kept in `localStorage`, and the ▾ menu can download YAML/JSON or export a PNG.
 
 ### Using the app
 
@@ -25,11 +28,11 @@ If the app is served as static files (`npm run build`, then host `dist/`), there
 | Connect nodes | `E` / **Connect**, click source, then target |
 | Inspect / edit | Click a node or edge; edit label, id, style, properties on the right |
 | Delete | `Del` / `Backspace`, or the button in the inspector |
-| Arrange | Drag nodes; or choose a layout and press **Layout**; `F` fits the view |
+| Arrange | Drag nodes, or pick a layout from the dropdown (it applies immediately; **↻** runs it again). **Smart (layered)** puts parents above their children and minimises edge crossings; **Force-directed** spreads nodes out like springs. `F` fits the view |
 | Styles | **🎨 Styles**: node color/border/shape/size/icon, edge color/width/line/arrow/curve |
 | Search | `/` — matches labels, ids and property values; `Enter` jumps to the first hit |
 | Undo / redo | `Ctrl+Z` / `Ctrl+Shift+Z` |
-| Open / save | `Ctrl+O` / `Ctrl+S` (YAML); JSON and PNG export in the ▾ menu |
+| Open / save | `Ctrl+O` / `Ctrl+S` (saves to the open file; **Download** in Firefox/Safari); Save as, JSON and PNG in the ▾ menu |
 | Help | `?` |
 
 ### Icons
@@ -72,14 +75,16 @@ This repo includes `.mcp.json`, so Claude Code opened in this folder offers the 
 | `edit_graph_properties` | Set/remove/replace graph-level key/value properties |
 | `set_style`, `remove_style` | Create/replace/remove reusable node and edge styles (including `icon` / `iconSize`) |
 
-When a file is open, every change is written to it immediately, and the file is re-read before each operation, so the MCP server and the web app can be used at the same time without overwriting each other.
+When a file is open, every change is written to it immediately, and the file is re-read before each operation, so edits made to the file by other tools are not overwritten.
 
 ## File format
 
 ```yaml
 properties:            # GraphProperty[]
-  - key: title
+  - key: title         # shown as the graph's name
     value: My graph
+  - key: subtitle      # optional line shown under the title
+    value: What this graph is about
 styles:                # reusable looks, referenced by id
   - id: pr
     target: node       # node | edge
@@ -120,7 +125,6 @@ For hand-written files, `properties` may also be a plain mapping (`properties: {
 
 ```
 shared/   data model, graph operations, YAML/JSON (used by everything)
-server/   Vite plugin: file API + change stream for the web app
 mcp/      MCP server (stdio)
 web/      React + Cytoscape.js frontend
 examples/ sample graphs

@@ -1,6 +1,8 @@
 # MapNotes graph file. Every section is optional.
 properties:
   - key: title
+    value: PR tracking
+  - key: subtitle
     value: Pull requests → issues → projects
   - key: owner
     value: platform-team
