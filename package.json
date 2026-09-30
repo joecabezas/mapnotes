@@ -1,0 +1,32 @@
+{
+  "name": "mapnotes",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Interactive graph render engine with a YAML file format and an MCP server",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.31.0",
+    "cytoscape": "^3.34.3",
+    "js-yaml": "^5.4.2",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/cytoscape": "^3.21.9",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^26.6.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1"
+  }
+}

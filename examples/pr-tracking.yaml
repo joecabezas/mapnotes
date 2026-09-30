@@ -1,0 +1,99 @@
+# MapNotes graph file. Every section is optional.
+properties:
+  - key: title
+    value: Pull requests → issues → projects
+  - key: owner
+    value: platform-team
+
+# Reusable looks. Nodes/edges pick one with `style: <id>`.
+styles:
+  - id: project
+    target: node
+    name: Project
+    color: "#bb9af7"
+    borderColor: "#e0d4ff"
+    shape: hexagon
+    size: 60
+  - id: issue
+    target: node
+    name: Issue
+    color: "#e0af68"
+    borderColor: "#ffe3b3"
+    shape: round-rectangle
+    size: 42
+  - id: pr
+    target: node
+    name: Pull request
+    color: "#7aa2f7"
+    borderColor: "#c9d8ff"
+    shape: ellipse
+    size: 34
+  - id: fixes
+    target: edge
+    name: Fixes
+    color: "#7dcfff"
+    width: 2
+    lineStyle: solid
+    arrow: triangle
+  - id: belongs-to
+    target: edge
+    name: Belongs to
+    color: "#9aa5ce"
+    width: 2
+    lineStyle: dashed
+    arrow: vee
+
+nodes:
+  - id: proj-api
+    label: API v2
+    style: project
+    position: { x: 0, y: -220 }
+    properties:
+      - key: lead
+        value: dana
+  - id: issue-12
+    label: "#12 Rate limiting"
+    style: issue
+    position: { x: -200, y: -40 }
+    properties:
+      - key: status
+        value: open
+      - key: priority
+        value: high
+  - id: issue-15
+    label: "#15 Pagination"
+    style: issue
+    position: { x: 200, y: -40 }
+    properties:
+      - key: status
+        value: in progress
+  - id: pr-101
+    label: "PR 101"
+    style: pr
+    position: { x: -300, y: 140 }
+    properties:
+      - key: author
+        value: sam
+      - key: url
+        value: https://example.com/pulls/101
+  - id: pr-104
+    label: "PR 104"
+    style: pr
+    position: { x: -100, y: 140 }
+    properties:
+      - key: author
+        value: lee
+  - id: pr-107
+    label: "PR 107"
+    style: pr
+    position: { x: 200, y: 140 }
+    properties:
+      - key: author
+        value: sam
+
+edges:
+  - { id: e1, source: pr-101, target: issue-12, label: fixes, style: fixes, properties: [] }
+  - { id: e2, source: pr-104, target: issue-12, style: fixes, properties: [] }
+  - { id: e3, source: pr-107, target: issue-15, style: fixes, properties: [] }
+  - { id: e4, source: issue-12, target: proj-api, style: belongs-to, properties: [] }
+  - { id: e5, source: issue-15, target: proj-api, style: belongs-to, properties: [] }
