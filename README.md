@@ -2,7 +2,7 @@
 
 A render engine for your own graphs. Model anything as nodes and edges (pull requests → issues → projects, services → dependencies, notes → topics…), attach key/value properties, style them, and save everything as a readable YAML file.
 
-- **Web app**: interactive canvas (drag, click to inspect, hover to preview), editing of nodes, edges, graph properties and styles, automatic layouts, search, undo/redo, dark theme by default with a light theme toggle.
+- **Web app**: interactive canvas (drag, click to inspect, hover to preview), editing of nodes, edges, graph properties and styles (including full-color brand icons), automatic layouts, search, undo/redo, dark theme by default with a light theme toggle.
 - **MCP server**: lets an AI assistant (Claude Code, Claude Desktop, …) load, query and edit the same graph file. Changes show up live in the open web app.
 
 ## Quick start
@@ -32,6 +32,17 @@ If the app is served as static files (`npm run build`, then host `dist/`), there
 | Open / save | `Ctrl+O` / `Ctrl+S` (YAML); JSON and PNG export in the ▾ menu |
 | Help | `?` |
 
+### Icons
+
+Node styles can show a full-color brand logo (Slack, GitHub, Linear, Obsidian, …) inside the node. Icons come from [svgl](https://svgl.app) and are fetched at runtime from jsDelivr (pinned to svgl `5.0.0`), so nothing is stored in this repo. The canvas needs network access to show them; if an icon can't be loaded, the node is simply drawn without it.
+
+- **Pick an icon**: in **🎨 Styles**, set **Icon** to the icon's svgl file name without `.svg`, e.g. `slack`, `linear`, `obsidian`. Logos with light and dark variants have a suffix: `github_light` is the dark logo for light fills, `github_dark` is the white logo for dark fills.
+- **Find a name**: search svgl.app, or query the API, e.g. `https://api.svgl.app?search=notion`, and take the file name from the returned `route`.
+- **Size it**: **Icon size (%)** sets how much of the node the icon fills (default 70).
+- **Make it readable**: logos are drawn over the node's shape and fill. A circle (`ellipse`) with a white fill works for most logos, with the brand color as the border. Pointed shapes such as `diamond` or `star` clip the logo.
+
+The MCP `set_style` tool accepts the same `icon` and `iconSize` fields.
+
 ## MCP server
 
 ```bash
@@ -59,7 +70,7 @@ This repo includes `.mcp.json`, so Claude Code opened in this folder offers the 
 | `add_node`, `edit_node`, `remove_node` | Node CRUD (rename via `newId` updates edges; removing a node removes its edges) |
 | `add_edge`, `edit_edge`, `remove_edge` | Edge CRUD (label, endpoints, style, properties) |
 | `edit_graph_properties` | Set/remove/replace graph-level key/value properties |
-| `set_style`, `remove_style` | Create/replace/remove reusable node and edge styles |
+| `set_style`, `remove_style` | Create/replace/remove reusable node and edge styles (including `icon` / `iconSize`) |
 
 When a file is open, every change is written to it immediately, and the file is re-read before each operation, so the MCP server and the web app can be used at the same time without overwriting each other.
 
@@ -77,7 +88,7 @@ styles:                # reusable looks, referenced by id
     textColor: "#ffffff"
     shape: ellipse     # ellipse, rectangle, round-rectangle, triangle, diamond, pentagon, hexagon, octagon, star, tag, barrel
     size: 34
-    icon: github_dark  # optional, svgl icon file name (https://svgl.app), loaded from jsDelivr
+    icon: github_dark  # optional, svgl icon file name (see "Icons" above)
     iconSize: 70       # optional, icon size as % of the node (default 70)
   - id: fixes
     target: edge
