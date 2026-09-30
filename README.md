@@ -22,7 +22,7 @@ In every browser the current graph is also kept in `localStorage`, and the ▾ m
 
 ### Live site
 
-Every push to `master` is built and published to GitHub Pages by `.github/workflows/deploy.yml`: https://blog.k014.net/mapnotes/
+Every push to `master` is built and published to GitHub Pages by `.github/workflows/deploy.yml`: https://joecabezas.github.io/mapnotes/
 
 ### Using the app
 
