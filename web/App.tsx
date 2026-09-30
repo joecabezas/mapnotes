@@ -304,9 +304,11 @@ export function App() {
   const deleteSelection = useCallback(() => {
     if (!selection) return;
     const ok =
-      selection.kind === 'node'
-        ? apply((g) => removeNode(g, selection.id).graph)
-        : apply((g) => removeEdge(g, selection.id));
+      selection.kind === 'nodes'
+        ? apply((g) => selection.ids.reduce((acc, id) => removeNode(acc, id).graph, g))
+        : selection.kind === 'node'
+          ? apply((g) => removeNode(g, selection.id).graph)
+          : apply((g) => removeEdge(g, selection.id));
     if (ok) setSelection(null);
   }, [selection, apply]);
 
@@ -505,6 +507,12 @@ export function App() {
       if (mod && e.key.toLowerCase() === 'y') {
         e.preventDefault();
         redo();
+        return;
+      }
+      if (mod && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        const ids = graphRef.current.nodes.map((n) => n.id);
+        setSelection(ids.length ? { kind: 'nodes', ids } : null);
         return;
       }
       if (mod || e.altKey) return;

@@ -9,7 +9,8 @@ import { buildStylesheet, type ThemeName } from '../theme';
 const nid = (id: string) => `n:${id}`;
 const eid = (id: string) => `e:${id}`;
 
-export type Selection = { kind: 'node' | 'edge'; id: string } | null;
+/** One node or edge (shown in the inspector), or several nodes (moved / deleted / styled together). */
+export type Selection = { kind: 'node' | 'edge'; id: string } | { kind: 'nodes'; ids: string[] } | null;
 
 
 /** ELK is large (~1.5 MB), so it's only downloaded the first time the smart layout runs. */
@@ -154,6 +155,17 @@ function updateArcs(edges: cytoscape.EdgeCollection) {
   });
 }
 
+/** The app-level selection matching what is selected on the canvas. */
+function selectionOf(cy: Core): Selection {
+  const nodes = cy.nodes(':selected');
+  const edges = cy.edges(':selected');
+  if (nodes.length > 1) return { kind: 'nodes', ids: nodes.map((n) => n.data('refId') as string) };
+  if (nodes.length === 1 && edges.empty()) return { kind: 'node', id: nodes.data('refId') };
+  if (nodes.empty() && edges.length === 1) return { kind: 'edge', id: edges.data('refId') };
+  if (nodes.length === 1) return { kind: 'nodes', ids: [nodes.data('refId')] };
+  return edges.nonempty() ? { kind: 'edge', id: edges.last().data('refId') } : null;
+}
+
 export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCanvas(props, ref) {
   const container = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
@@ -161,6 +173,8 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
   // Handlers change every render; the Cytoscape listeners read the latest ones.
   const latest = useRef(props);
   latest.current = props;
+  /** True while we apply the app's selection to Cytoscape, so those changes aren't reported back. */
+  const syncingSelection = useRef(false);
 
   function reportPositions(nodes: cytoscape.NodeCollection, record: boolean) {
     const positions: Record<string, Position> = {};
@@ -185,7 +199,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
     runLayout,
     center(sel) {
       const cy = cyRef.current;
-      if (!cy || !sel) return;
+      if (!cy || !sel || sel.kind === 'nodes') return;
       const ele = cy.getElementById(sel.kind === 'node' ? nid(sel.id) : eid(sel.id));
       if (ele.nonempty()) cy.animate({ center: { eles: ele }, zoom: Math.max(cy.zoom(), 1), duration: 300 });
     },
@@ -201,7 +215,8 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
     const cy = cytoscape({
       container: container.current,
       style: buildStylesheet(latest.current.graph.styles, latest.current.theme),
-      boxSelectionEnabled: false,
+      // Shift/Ctrl + click adds to the selection; Shift + drag on the background draws a selection box.
+      boxSelectionEnabled: true,
       selectionType: 'single',
       minZoom: 0.1,
       maxZoom: 4,
@@ -209,21 +224,34 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
     cyRef.current = cy;
 
     cy.on('tap', 'node', (e: EventObject) => {
-      const id = e.target.data('refId') as string;
-      if (latest.current.connecting) latest.current.onNodeTapInConnectMode(id);
-      else latest.current.onSelect({ kind: 'node', id });
+      if (latest.current.connecting) latest.current.onNodeTapInConnectMode(e.target.data('refId') as string);
     });
-    cy.on('tap', 'edge', (e: EventObject) => {
-      if (latest.current.connecting) return;
-      latest.current.onSelect({ kind: 'edge', id: e.target.data('refId') });
-    });
-    cy.on('tap', (e: EventObject) => {
-      if (e.target === cy) latest.current.onSelect(null);
+
+    // Cytoscape does the selecting (click, Shift/Ctrl + click, box); report the result once per burst
+    // of events (a box selection fires one per element). Changes we make ourselves are ignored.
+    let reportQueued = false;
+    cy.on('select unselect', () => {
+      if (syncingSelection.current || reportQueued) return;
+      reportQueued = true;
+      queueMicrotask(() => {
+        reportQueued = false;
+        latest.current.onSelect(selectionOf(cy));
+      });
     });
     cy.on('dbltap', (e: EventObject) => {
       if (e.target === cy) latest.current.onBackgroundDoubleTap({ ...e.position });
     });
-    cy.on('dragfree', 'node', (e: EventObject) => reportPositions(e.target as NodeSingular, true));
+    // Dragging a selected node moves all selected nodes; save them together, once.
+    let dragQueued = false;
+    cy.on('dragfree', 'node', (e: EventObject) => {
+      const moved = (e.target as NodeSingular).union(cy.nodes(':selected'));
+      if (dragQueued) return;
+      dragQueued = true;
+      queueMicrotask(() => {
+        dragQueued = false;
+        reportPositions(moved.union(cy.nodes(':selected')), true);
+      });
+    });
     cy.on('position', 'node', (e: EventObject) => updateArcs((e.target as NodeSingular).connectedEdges()));
     cy.on('add', 'edge', (e: EventObject) => updateArcs(e.target as cytoscape.EdgeCollection));
 
@@ -368,10 +396,19 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
     const cy = cyRef.current;
     if (!cy) return;
     const sel = props.selection;
-    const target = sel ? cy.getElementById(sel.kind === 'node' ? nid(sel.id) : eid(sel.id)) : cy.collection();
+    let target = cy.collection();
+    if (sel?.kind === 'nodes') sel.ids.forEach((id) => (target = target.union(cy.getElementById(nid(id)))));
+    else if (sel) target = cy.getElementById(sel.kind === 'node' ? nid(sel.id) : eid(sel.id));
+    syncingSelection.current = true;
     cy.elements(':selected').difference(target).unselect();
     target.select();
+    syncingSelection.current = false;
   }, [props.selection, props.graph]);
+
+  // In connect mode clicks pick edge endpoints, so they must not change the selection.
+  useEffect(() => {
+    cyRef.current?.autounselectify(props.connecting);
+  }, [props.connecting]);
 
   // Connect-mode source marker.
   useEffect(() => {

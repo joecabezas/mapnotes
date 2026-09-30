@@ -352,8 +352,64 @@ function GraphPanel(p: Props) {
   );
 }
 
+function MultiNodePanel({ ids, ...p }: Props & { ids: string[] }) {
+  const nodes = p.graph.nodes.filter((n) => ids.includes(n.id));
+  const styles = new Set(nodes.map((n) => n.style ?? ''));
+  const setStyle = (style: string) =>
+    p.apply((g) => nodes.reduce((acc, n) => editNode(acc, { id: n.id, style }).graph, g));
+  return (
+    <>
+      <header className="panel-head">
+        <span className="kind-badge">Nodes</span>
+        <h2>{nodes.length} nodes selected</h2>
+      </header>
+      <section>
+        <p className="muted small">
+          Drag any of them to move them together. <kbd>Shift</kbd>/<kbd>Ctrl</kbd> + click adds or removes a node.
+        </p>
+        <StyleSelect
+          styles={p.graph.styles}
+          target="node"
+          value={styles.size === 1 ? [...styles][0] : undefined}
+          onChange={setStyle}
+          onManage={p.onOpenStyles}
+        />
+      </section>
+      <section>
+        <h3>Selected</h3>
+        <ul className="link-list">
+          {nodes.map((n) => (
+            <li key={n.id}>
+              <button className="link" onClick={() => p.onSelect({ kind: 'node', id: n.id })} data-tip="Select only this node">
+                {n.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
+      <footer className="panel-foot">
+        <button
+          className="btn danger"
+          data-tip="Delete these nodes and their edges (Del)"
+          onClick={() => p.apply((g) => nodes.reduce((acc, n) => removeNode(acc, n.id).graph, g)) && p.onSelect(null)}
+        >
+          Delete {nodes.length} nodes
+        </button>
+      </footer>
+    </>
+  );
+}
+
 export function Inspector(props: Props) {
   const { graph, selection } = props;
+  if (selection?.kind === 'nodes') {
+    const ids = selection.ids.filter((id) => graph.nodes.some((n) => n.id === id));
+    if (ids.length === 1) {
+      const node = graph.nodes.find((n) => n.id === ids[0])!;
+      return <NodePanel key={node.id} {...props} node={node} />;
+    }
+    if (ids.length > 1) return <MultiNodePanel {...props} ids={ids} />;
+  }
   if (selection?.kind === 'node') {
     const node = graph.nodes.find((n) => n.id === selection.id);
     if (node) return <NodePanel key={node.id} {...props} node={node} />;

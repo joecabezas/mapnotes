@@ -31,6 +31,7 @@ Every push to `master` is built and published to GitHub Pages by `.github/workfl
 | Add node | `N`, **+ Node**, or double-click empty canvas |
 | Connect nodes | `E` / **Connect**, click source, then target |
 | Inspect / edit | Click a node or edge; edit label, id, style, properties on the right |
+| Select several | `Shift`/`Ctrl` + click, or `Shift` + drag a box on empty canvas; `Ctrl+A` selects all. Drag any selected node to move them together; the inspector can restyle or delete them at once |
 | Delete | `Del` / `Backspace`, or the button in the inspector |
 | Arrange | Drag nodes, or pick a layout from the dropdown (it applies immediately; **↻** runs it again). **Smart (layered)** puts parents above their children and minimises edge crossings; **Force-directed** spreads nodes out like springs. `F` fits the view |
 | Styles | **🎨 Styles**: node color/border/shape/size/icon, edge color/width/line/arrow/curve |
@@ -52,11 +53,37 @@ The MCP `set_style` tool accepts the same `icon` and `iconSize` fields.
 
 ## MCP server
 
+The MCP server lets an AI agent read and edit a graph file. It runs locally over stdio, from a clone of this repo:
+
 ```bash
-npx tsx mcp/server.ts graph.yaml     # stdio transport
+git clone https://github.com/joecabezas/mapnotes && cd mapnotes && npm install
+npx tsx mcp/server.ts graph.yaml     # stdio transport; starts empty if the file does not exist yet
 ```
 
-This repo includes `.mcp.json`, so Claude Code opened in this folder offers the `mapnotes` server automatically (pointing at `graph.yaml`). For other clients:
+### Install it with your agent
+
+Paste this into Claude Code, Codex, Cursor or any agent that can run commands:
+
+```text
+Install the MapNotes MCP server for me:
+1. Clone https://github.com/joecabezas/mapnotes into ~/mapnotes (skip if it's already there) and run `npm install` in it.
+2. Ask me which graph file it should edit. Default: ~/mapnotes/graph.yaml. Use absolute paths from here on.
+3. Register a stdio MCP server named "mapnotes" that runs: npx tsx <repo>/mcp/server.ts <graph file>
+   - Claude Code: claude mcp add --scope user mapnotes -- npx tsx <repo>/mcp/server.ts <graph file>
+   - Other clients: add it under "mcpServers" in the client's MCP config file.
+4. Tell me how to reload MCP servers in this client, then check it works by calling the mapnotes get_graph tool.
+To see the graph, I open https://joecabezas.github.io/mapnotes/ in Chrome or Edge and use Open to pick the same file.
+```
+
+### Install it yourself
+
+In Claude Code:
+
+```bash
+claude mcp add --scope user mapnotes -- npx tsx /absolute/path/to/mapnotes/mcp/server.ts /absolute/path/to/graph.yaml
+```
+
+This repo also includes `.mcp.json`, so Claude Code opened in this folder offers the `mapnotes` server automatically (pointing at `graph.yaml`). For other clients:
 
 ```json
 {
