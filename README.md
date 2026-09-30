@@ -20,6 +20,10 @@ The web app is a static site with no backend. How it saves depends on the browse
 
 In every browser the current graph is also kept in `localStorage`, and the ▾ menu can download YAML/JSON or export a PNG.
 
+### Live site
+
+Every push to `master` is built and published to GitHub Pages by `.github/workflows/deploy.yml`: https://blog.k014.net/mapnotes/
+
 ### Using the app
 
 | Action | How |
