@@ -1085,3 +1085,23 @@ button.sync.error {
     grid-template-columns: 1fr;
   }
 }
+
+.snippet {
+  position: relative;
+}
+.snippet .help-command {
+  padding-right: 72px;
+}
+.snippet-copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}
+.mcp-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.mcp-links .btn {
+  color: inherit;
+}

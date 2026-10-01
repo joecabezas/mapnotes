@@ -4,6 +4,7 @@ import { formatForPath, parseGraphText, serializeGraph, serializeGraphYaml } fro
 import { GraphCanvas, type GraphCanvasHandle, LAYOUTS, type LayoutName, type Selection } from './components/GraphCanvas';
 import { HelpDialog } from './components/HelpDialog';
 import { Inspector } from './components/Inspector';
+import { McpDialog } from './components/McpDialog';
 import { PanelResizer } from './components/PanelResizer';
 import { StylesDialog } from './components/StylesDialog';
 import {
@@ -137,6 +138,7 @@ export function App() {
   const [theme, setTheme] = useState<ThemeName>(() => (storageGet(THEME_KEY) === 'light' ? 'light' : 'dark'));
   const [stylesOpen, setStylesOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [mcpOpen, setMcpOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [issues, setIssues] = useState<Issues | null>(null);
@@ -628,6 +630,7 @@ export function App() {
         case 'Escape':
           if (stylesOpen) setStylesOpen(false);
           else if (helpOpen) setHelpOpen(false);
+          else if (mcpOpen) setMcpOpen(false);
           else if (connect) setConnect(null);
           else setSelection(null);
           break;
@@ -648,7 +651,7 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [addNodeInView, connect, deleteSelection, helpOpen, openAction, redo, save, selection, startConnect, stylesOpen, undo]);
+  }, [addNodeInView, connect, deleteSelection, helpOpen, mcpOpen, openAction, redo, save, selection, startConnect, stylesOpen, undo]);
 
   return (
     <div className="app">
@@ -847,6 +850,9 @@ export function App() {
         >
           {theme === 'dark' ? '☀' : '☾'}
         </button>
+        <button className="btn ghost" data-tip="Let an AI assistant edit your graphs" onClick={() => setMcpOpen(true)}>
+          Install MCP
+        </button>
         <button className="btn ghost icon" data-tip="Help & shortcuts (?)" aria-label="Help" onClick={() => setHelpOpen(true)}>
           ?
         </button>
@@ -985,7 +991,17 @@ export function App() {
       </main>
 
       {stylesOpen && <StylesDialog graph={graph} theme={theme} apply={apply} onClose={() => setStylesOpen(false)} />}
-      {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} fileName={file?.handle.name ?? null} />}
+      {helpOpen && (
+        <HelpDialog
+          onClose={() => setHelpOpen(false)}
+          onOpenMcp={() => {
+            setHelpOpen(false);
+            setMcpOpen(true);
+          }}
+          fileName={file?.handle.name ?? null}
+        />
+      )}
+      {mcpOpen && <McpDialog onClose={() => setMcpOpen(false)} />}
 
       <div className="toasts" aria-live="polite">
         {toasts.map((t) => (
