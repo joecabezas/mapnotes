@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readGraphFile, writeGraphFile, writeGraphText } from '../shared/fileStore.ts';
 import { addNode, emptyGraph, normalizeGraph } from '../shared/model.ts';
 import { parseGraphText } from '../shared/yaml.ts';
@@ -91,8 +91,25 @@ describe('writeGraphText atomicity', () => {
   });
 
   // TODO.md: "Make temporary file names collision resistant and clean up after failed writes."
-  it.todo('concurrent writes from one process leave a valid graph and no stray temporary file');
-  it.todo('a failed rename removes the temporary file and keeps the previous graph');
+  it('concurrent writes from one process leave a valid graph and no stray temporary file', async () => {
+    const file = path.join(dir, 'g.yaml');
+    await Promise.all(Array.from({ length: 50 }, (_, i) => writeGraphText(file, `properties: { i: ${i} }\n`)));
+    expect((await readGraphFile(file)).properties).toHaveLength(1);
+    expect(await fs.readdir(dir)).toEqual(['g.yaml']);
+  });
+
+  it('a failed rename removes the temporary file and keeps the previous graph', async () => {
+    const file = path.join(dir, 'g.yaml');
+    const before = await writeGraphFile(file, graph);
+    const rename = vi.spyOn(fs, 'rename').mockRejectedValueOnce(Object.assign(new Error('boom'), { code: 'EXDEV' }));
+    try {
+      await expect(writeGraphText(file, 'nodes: [')).rejects.toThrow('boom');
+    } finally {
+      rename.mockRestore();
+    }
+    expect(await fs.readFile(file, 'utf8')).toBe(before);
+    expect(await fs.readdir(dir)).toEqual(['g.yaml']);
+  });
 
   // TODO.md: "Preserve the linked file's identity and permissions on write."
   it.todo('writing through a symlink behaves as documented');
