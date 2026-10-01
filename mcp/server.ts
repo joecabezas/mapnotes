@@ -20,6 +20,9 @@ import {
   editNode,
   emptyGraph,
   type Graph,
+  type GraphEdge,
+  type GraphNode,
+  type KeyValue,
   LINE_STYLES,
   NODE_SHAPES,
   removeEdge,
@@ -49,7 +52,33 @@ function summary(g: Graph): string {
   return `${g.nodes.length} node(s), ${g.edges.length} edge(s), ${g.styles.length} style(s), ${g.properties.length} graph propert${g.properties.length === 1 ? 'y' : 'ies'}`;
 }
 
-const ok = (text: string) => ({ content: [{ type: 'text' as const, text }] });
+function props(list: KeyValue[]): string {
+  return list.map((p) => `${p.key}=${p.value}`).join(', ');
+}
+
+function describeEdge(e: GraphEdge): string {
+  const label = e.label ? ` "${e.label}"` : '';
+  const style = e.style ? ` [style ${e.style}]` : '';
+  const extra = e.properties.length ? ` {${props(e.properties)}}` : '';
+  return `"${e.id}" ${e.source} → ${e.target}${label}${style}${extra}`;
+}
+
+function describeNode(n: GraphNode): string {
+  const style = n.style ? ` [style ${n.style}]` : '';
+  const pos = n.position ? ` at (${n.position.x}, ${n.position.y})` : '';
+  const extra = n.properties.length ? ` {${props(n.properties)}}` : '';
+  return `"${n.id}" "${n.label}"${style}${pos}${extra}`;
+}
+
+function counts(g: Graph) {
+  return { nodes: g.nodes.length, edges: g.edges.length, styles: g.styles.length, properties: g.properties.length };
+}
+
+/** A tool result: concise text for people plus the same data as structured content. */
+const ok = (text: string, data: Record<string, unknown>) => ({
+  content: [{ type: 'text' as const, text }],
+  structuredContent: data,
+});
 const fail = (err: unknown) => ({
   content: [{ type: 'text' as const, text: `Error: ${(err as Error).message}` }],
   isError: true,
@@ -70,6 +99,32 @@ const kv = z.object({ key: z.string(), value: z.string() });
 const kvList = z.array(kv);
 const position = z.object({ x: z.number(), y: z.number() });
 
+// Output schemas: the structured content returned alongside each tool's text.
+const fileOut = z.string().nullable().describe('Current graph file; null when the graph is in memory only');
+const countsOut = z.object({ nodes: z.number(), edges: z.number(), styles: z.number(), properties: z.number() });
+const nodeOut = z.object({
+  id: z.string(),
+  label: z.string(),
+  style: z.string().optional(),
+  position: position.optional(),
+  properties: kvList,
+});
+const edgeOut = z.object({
+  id: z.string(),
+  source: z.string(),
+  target: z.string(),
+  label: z.string().optional(),
+  style: z.string().optional(),
+  properties: kvList,
+});
+const styleOut = z.looseObject({ id: z.string(), target: z.enum(['node', 'edge']) });
+const graphOut = z.object({
+  properties: kvList,
+  styles: z.array(styleOut),
+  nodes: z.array(nodeOut),
+  edges: z.array(edgeOut),
+});
+
 const server = new McpServer({ name: 'mapnotes', version: '0.1.0' });
 
 server.registerTool(
@@ -79,13 +134,14 @@ server.registerTool(
     description:
       'Open a graph file (YAML, or JSON if it ends in .json). It becomes the current file: all later changes are saved to it automatically. A missing file starts an empty graph.',
     inputSchema: { path: z.string().describe('Path to the graph file') },
+    outputSchema: { file: z.string(), counts: countsOut },
   },
   safe(async ({ path: p }) => {
     const file = path.resolve(p);
     const graph = await readGraphFile(file);
     currentFile = file;
     memoryGraph = graph;
-    return ok(`Loaded ${file}: ${summary(graph)}`);
+    return ok(`Loaded ${file}: ${summary(graph)}`, { file, counts: counts(graph) });
   }),
 );
 
@@ -96,6 +152,7 @@ server.registerTool(
     description:
       'Save the current graph. With a path, saves a copy there (format from the extension: .json → JSON, otherwise YAML) and makes it the current file.',
     inputSchema: { path: z.string().optional().describe('Destination file; defaults to the current file') },
+    outputSchema: { file: z.string(), format: z.enum(['yaml', 'json']), counts: countsOut },
   },
   safe(async ({ path: p }) => {
     const graph = await current();
@@ -103,7 +160,8 @@ server.registerTool(
     if (!file) throw new Error('No current file; pass a path');
     await writeGraphFile(file, graph);
     currentFile = file;
-    return ok(`Saved ${summary(graph)} to ${file} (${formatForPath(file)})`);
+    const format = formatForPath(file);
+    return ok(`Saved ${summary(graph)} to ${file} (${format})`, { file, format, counts: counts(graph) });
   }),
 );
 
@@ -112,13 +170,14 @@ server.registerTool(
   {
     title: 'Get graph',
     description: 'Return the whole current graph (properties, styles, nodes, edges).',
-    inputSchema: { format: z.enum(['yaml', 'json']).optional().describe('Output format, default yaml') },
+    inputSchema: { format: z.enum(['yaml', 'json']).optional().describe('Output format of the text, default yaml') },
+    outputSchema: { file: fileOut, graph: graphOut },
     annotations: { readOnlyHint: true },
   },
   safe(async ({ format }) => {
     const graph = await current();
     const header = currentFile ? `# ${currentFile}\n` : '# (unsaved graph)\n';
-    return ok(header + serializeGraph(graph, format ?? 'yaml'));
+    return ok(header + serializeGraph(graph, format ?? 'yaml'), { file: currentFile ?? null, graph });
   }),
 );
 
@@ -128,6 +187,7 @@ server.registerTool(
     title: 'Get node',
     description: 'Return one node with its properties and all edges connected to it.',
     inputSchema: { id: z.string() },
+    outputSchema: { node: nodeOut, edges: z.array(edgeOut) },
     annotations: { readOnlyHint: true },
   },
   safe(async ({ id }) => {
@@ -135,7 +195,8 @@ server.registerTool(
     const node = graph.nodes.find((n) => n.id === id);
     if (!node) throw new Error(`Node "${id}" does not exist`);
     const edges = graph.edges.filter((e) => e.source === id || e.target === id);
-    return ok(JSON.stringify({ node, edges }, null, 2));
+    const lines = [`Node ${describeNode(node)}`, `${edges.length} connected edge(s)`, ...edges.map((e) => `- ${describeEdge(e)}`)];
+    return ok(lines.join('\n'), { node, edges });
   }),
 );
 
@@ -153,11 +214,12 @@ server.registerTool(
         .describe('Usually omit: the web app places new nodes next to their neighbours, and lays out graphs that have no positions at all'),
       properties: kvList.optional(),
     },
+    outputSchema: { node: nodeOut, file: fileOut },
   },
   safe(async (args) => {
     const { graph, node } = addNode(await current(), args);
     await commit(graph);
-    return ok(`Added node "${node.id}" (${where()})`);
+    return ok(`Added node "${node.id}" (${where()})`, { node, file: currentFile ?? null });
   }),
 );
 
@@ -177,11 +239,12 @@ server.registerTool(
       removeProperties: z.array(z.string()).optional(),
       properties: kvList.optional(),
     },
+    outputSchema: { node: nodeOut, file: fileOut },
   },
   safe(async (args) => {
     const { graph, node } = editNode(await current(), args);
     await commit(graph);
-    return ok(`Updated node "${node.id}" (${where()})\n${JSON.stringify(node, null, 2)}`);
+    return ok(`Updated node ${describeNode(node)} (${where()})`, { node, file: currentFile ?? null });
   }),
 );
 
@@ -191,13 +254,14 @@ server.registerTool(
     title: 'Remove node',
     description: 'Remove a node and every edge connected to it.',
     inputSchema: { id: z.string() },
+    outputSchema: { removedNode: z.string(), removedEdges: z.array(z.string()), file: fileOut },
     annotations: { destructiveHint: true },
   },
   safe(async ({ id }) => {
     const { graph, removedEdges } = removeNode(await current(), id);
     await commit(graph);
     const extra = removedEdges.length ? `, plus edge(s) ${removedEdges.join(', ')}` : '';
-    return ok(`Removed node "${id}"${extra} (${where()})`);
+    return ok(`Removed node "${id}"${extra} (${where()})`, { removedNode: id, removedEdges, file: currentFile ?? null });
   }),
 );
 
@@ -214,11 +278,12 @@ server.registerTool(
       style: z.string().optional().describe('Id of an edge style from the graph styles'),
       properties: kvList.optional(),
     },
+    outputSchema: { edge: edgeOut, file: fileOut },
   },
   safe(async (args) => {
     const { graph, edge } = addEdge(await current(), args);
     await commit(graph);
-    return ok(`Added edge "${edge.id}" ${edge.source} → ${edge.target} (${where()})`);
+    return ok(`Added edge "${edge.id}" ${edge.source} → ${edge.target} (${where()})`, { edge, file: currentFile ?? null });
   }),
 );
 
@@ -239,11 +304,12 @@ server.registerTool(
       removeProperties: z.array(z.string()).optional(),
       properties: kvList.optional(),
     },
+    outputSchema: { edge: edgeOut, file: fileOut },
   },
   safe(async (args) => {
     const { graph, edge } = editEdge(await current(), args);
     await commit(graph);
-    return ok(`Updated edge "${edge.id}" (${where()})\n${JSON.stringify(edge, null, 2)}`);
+    return ok(`Updated edge ${describeEdge(edge)} (${where()})`, { edge, file: currentFile ?? null });
   }),
 );
 
@@ -253,11 +319,12 @@ server.registerTool(
     title: 'Remove edge',
     description: 'Remove an edge by id.',
     inputSchema: { id: z.string() },
+    outputSchema: { removedEdge: z.string(), file: fileOut },
     annotations: { destructiveHint: true },
   },
   safe(async ({ id }) => {
     await commit(removeEdge(await current(), id));
-    return ok(`Removed edge "${id}" (${where()})`);
+    return ok(`Removed edge "${id}" (${where()})`, { removedEdge: id, file: currentFile ?? null });
   }),
 );
 
@@ -272,11 +339,15 @@ server.registerTool(
       remove: z.array(z.string()).optional(),
       properties: kvList.optional(),
     },
+    outputSchema: { properties: kvList, file: fileOut },
   },
   safe(async (args) => {
     const graph = editGraphProperties(await current(), args);
     await commit(graph);
-    return ok(`Graph properties: ${JSON.stringify(graph.properties)} (${where()})`);
+    return ok(`Graph properties: ${JSON.stringify(graph.properties)} (${where()})`, {
+      properties: graph.properties,
+      file: currentFile ?? null,
+    });
   }),
 );
 
@@ -308,11 +379,12 @@ server.registerTool(
       arrow: z.enum(ARROW_SHAPES).optional().describe('Edges only, target arrow shape'),
       curve: z.enum(CURVE_STYLES).optional().describe('Edges only'),
     },
+    outputSchema: { style: styleOut, file: fileOut },
   },
   safe(async (args) => {
     const { graph, style } = upsertStyle(await current(), args);
     await commit(graph);
-    return ok(`Style "${style.id}" saved (${where()})`);
+    return ok(`Style "${style.id}" saved (${where()})`, { style, file: currentFile ?? null });
   }),
 );
 
@@ -322,11 +394,12 @@ server.registerTool(
     title: 'Remove style',
     description: 'Remove a style; nodes/edges using it fall back to the default look.',
     inputSchema: { id: z.string() },
+    outputSchema: { removedStyle: z.string(), file: fileOut },
     annotations: { destructiveHint: true },
   },
   safe(async ({ id }) => {
     await commit(removeStyle(await current(), id));
-    return ok(`Removed style "${id}" (${where()})`);
+    return ok(`Removed style "${id}" (${where()})`, { removedStyle: id, file: currentFile ?? null });
   }),
 );
 
