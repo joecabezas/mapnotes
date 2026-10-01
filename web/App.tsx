@@ -16,6 +16,7 @@ import {
   rememberHandle,
   writeHandle,
 } from './fileAccess';
+import { createFilePoll } from './filePoll';
 import type { ThemeName } from './theme';
 
 const LOCAL_KEY = 'mapnotes:graph';
@@ -253,38 +254,29 @@ export function App() {
   const watchedHandle = file && file.status !== 'reconnect' ? file.handle : null;
   useEffect(() => {
     if (!watchedHandle) return;
+    const poll = createFilePoll({
+      handle: watchedHandle,
+      modified: fileModified,
+      text: fileText,
+      onChange: (next) => {
+        setGraph(next, { fromRemote: true });
+        setFile((f) => (f?.handle === watchedHandle ? { ...f, status: 'saved' } : f));
+      },
+      // A half-written or invalid file is retried on every poll and reported once per revision.
+      onUnreadable: (err) => toast(`Could not read ${watchedHandle.name}, retrying: ${err.message}`, 'error'),
+      // A missing file is reported once.
+      onMissing: () => {
+        if (fileRef.current?.status === 'error') return;
+        setFile((f) => (f?.handle === watchedHandle ? { ...f, status: 'error' } : f));
+        toast(`${watchedHandle.name} was moved or deleted`, 'error');
+      },
+    });
     let busy = false;
-    let rejected = 0; // modification time of the last revision reported as unreadable
     const timer = setInterval(async () => {
       if (busy || fileRef.current?.status === 'saving') return;
       busy = true;
-      let modified = 0;
       try {
-        const current = await watchedHandle.getFile();
-        modified = current.lastModified;
-        if (modified === fileModified.current) return;
-        const text = await current.text();
-        if (text !== fileText.current) {
-          const next = parseGraphText(text);
-          fileText.current = text;
-          setGraph(next, { fromRemote: true });
-          setFile((f) => (f?.handle === watchedHandle ? { ...f, status: 'saved' } : f));
-        }
-        // Only a revision that was read and parsed counts as seen, so a failed one is retried.
-        fileModified.current = modified;
-        rejected = 0;
-      } catch (err) {
-        // A half-written or invalid file is retried on every poll and reported once per revision;
-        // a missing one is reported once.
-        if ((err as DOMException).name === 'NotFoundError') {
-          if (fileRef.current?.status !== 'error') {
-            setFile((f) => (f?.handle === watchedHandle ? { ...f, status: 'error' } : f));
-            toast(`${watchedHandle.name} was moved or deleted`, 'error');
-          }
-        } else if (modified !== rejected) {
-          rejected = modified;
-          toast(`Could not read ${watchedHandle.name}, retrying: ${(err as Error).message}`, 'error');
-        }
+        await poll();
       } finally {
         busy = false;
       }
