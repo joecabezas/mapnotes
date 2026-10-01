@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readHandle, writeHandle } from '../web/fileAccess.ts';
+import { readHandle, writeHandle, writeHandleIfUnchanged } from '../web/fileAccess.ts';
 
 /** In-memory stand-in for a File System Access API file handle. */
 function fakeHandle(opts: { failWrites?: number } = {}) {
@@ -57,7 +57,14 @@ describe('browser save/poll races (web/App.tsx)', () => {
   it.todo('a failed manual save leaves the status in error until a retry succeeds');
 
   // TODO.md: "Detect external changes before replacing a linked file."
-  it.todo('an external edit between a browser edit and its autosave is not overwritten');
+  it('an external edit between a browser edit and its autosave is not overwritten', async () => {
+    const { handle, state } = fakeHandle();
+    state.text = 'loaded';
+    const { text } = await readHandle(handle);
+    state.text = 'external';
+    expect(await writeHandleIfUnchanged(handle, text, 'browser')).toBeNull();
+    expect(state.text).toBe('external');
+  });
 
   // TODO.md: "Retry a rejected external file revision."
   it.todo('a poll that fails to parse is retried for the same modification time');

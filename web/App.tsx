@@ -15,6 +15,7 @@ import {
   recallHandle,
   rememberHandle,
   writeHandle,
+  writeHandleIfUnchanged,
 } from './fileAccess';
 import type { ThemeName } from './theme';
 
@@ -208,13 +209,15 @@ export function App() {
    * last read or wrote it; then the file is flagged as in conflict and left alone.
    */
   const writeLinked = useCallback(async (handle: FileSystemFileHandle, text: string): Promise<boolean> => {
-    const disk = await readHandle(handle);
-    if (fileText.current !== null && disk.text !== fileText.current) {
+    const expected = fileText.current;
+    fileText.current = text;
+    const modified = expected === null ? await writeHandle(handle, text) : await writeHandleIfUnchanged(handle, expected, text);
+    if (modified === null) {
+      fileText.current = expected;
       setFile((f) => (f?.handle === handle ? { ...f, status: 'conflict' } : f));
       return false;
     }
-    fileText.current = text;
-    fileModified.current = await writeHandle(handle, text);
+    fileModified.current = modified;
     setFile((f) => (f?.handle === handle ? { ...f, status: 'saved' } : f));
     return true;
   }, []);
