@@ -260,6 +260,7 @@ code,
   background: var(--warn);
 }
 .sync.error .dot,
+.sync.conflict .dot,
 .sync.offline .dot {
   background: var(--danger);
 }
@@ -515,6 +516,10 @@ button.sync.error {
   border-radius: 999px;
   box-shadow: var(--shadow);
   z-index: 6;
+}
+.banner.conflict {
+  top: 56px;
+  border-color: var(--danger);
 }
 
 .issues {

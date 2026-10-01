@@ -64,6 +64,16 @@ export async function writeHandle(handle: FileSystemFileHandle, text: string): P
 }
 
 /**
+ * Writes the whole file only if it still holds `expected` (what we last read or
+ * wrote), so edits other tools made in the meantime are never overwritten.
+ * Returns the new modification time, or null when the file changed.
+ */
+export async function writeHandleIfUnchanged(handle: FileSystemFileHandle, expected: string, text: string): Promise<number | null> {
+  if ((await readHandle(handle)).text !== expected) return null;
+  return writeHandle(handle, text);
+}
+
+/**
  * Whether we may read and write the file. Browsers forget the grant when the
  * page reloads; asking again (`request`) must happen inside a click handler.
  */

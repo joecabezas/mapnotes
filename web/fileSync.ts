@@ -1,4 +1,4 @@
-import { writeHandle } from './fileAccess';
+import { writeHandle, writeHandleIfUnchanged } from './fileAccess';
 
 type Ref<T> = { current: T };
 
@@ -17,6 +17,28 @@ export async function writeFileText(handle: FileSystemFileHandle, text: string, 
   try {
     refs.fileModified.current = await writeHandle(handle, text);
     refs.fileText.current = text;
+  } finally {
+    refs.writingText.current = null;
+  }
+}
+
+/**
+ * Like writeFileText, but leaves the file alone and returns false when another tool
+ * changed it since we last read or wrote it.
+ */
+export async function writeFileTextIfUnchanged(handle: FileSystemFileHandle, text: string, refs: FileSyncRefs): Promise<boolean> {
+  const expected = refs.fileText.current;
+  if (expected === null) {
+    await writeFileText(handle, text, refs);
+    return true;
+  }
+  refs.writingText.current = text;
+  try {
+    const modified = await writeHandleIfUnchanged(handle, expected, text);
+    if (modified === null) return false;
+    refs.fileModified.current = modified;
+    refs.fileText.current = text;
+    return true;
   } finally {
     refs.writingText.current = null;
   }
