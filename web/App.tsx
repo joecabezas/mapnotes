@@ -781,7 +781,12 @@ export function App() {
             data-tip="Connect two nodes with an edge (E): click the source, then the target"
             onClick={() => (connect ? setConnect(null) : startConnect(selection?.kind === 'node' ? selection.id : null))}
           >
-            ⟶ Connect
+            <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <circle cx="19" cy="5" r="2" />
+              <circle cx="5" cy="19" r="2" />
+              <path d="M5 17A12 12 0 0 1 17 5" />
+            </svg>
+            Connect
           </button>
           <button
             className="btn ghost icon"
@@ -790,7 +795,7 @@ export function App() {
             disabled={!canExpand}
             onClick={expandSelection}
           >
-            <svg className="expand-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
             </svg>
           </button>
@@ -801,7 +806,7 @@ export function App() {
             disabled={!lastExpansion}
             onClick={shrinkSelection}
           >
-            <svg className="expand-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7" />
             </svg>
           </button>
@@ -833,10 +838,14 @@ export function App() {
             aria-label="Run the layout again"
             onClick={() => canvas.current?.runLayout(layoutName)}
           >
-            ↻
+            <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8M21 3v5h-5M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16M8 16H3v5" />
+            </svg>
           </button>
-          <button className="btn ghost" data-tip="Fit graph to screen (F)" onClick={() => canvas.current?.fit()}>
-            Fit
+          <button className="btn ghost icon" data-tip="Fit graph to screen (F)" aria-label="Fit graph to screen" onClick={() => canvas.current?.fit()}>
+            <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" />
+            </svg>
           </button>
           <button className="btn ghost" data-tip="Colors, shapes, sizes and line styles" onClick={() => setStylesOpen(true)}>
             🎨 Styles

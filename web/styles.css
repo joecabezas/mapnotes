@@ -455,7 +455,8 @@ button.sync.error {
   visibility: visible;
   transition-delay: 0.45s;
 }
-[data-tip]:focus-within::after,
+[data-tip]:focus-visible::after,
+[data-tip]:has(:focus-visible)::after,
 .menu[open] [data-tip]::after {
   opacity: 0;
   visibility: hidden;
@@ -1106,7 +1107,7 @@ button.sync.error {
   color: inherit;
 }
 
-.expand-icon {
+.toolbar-icon {
   width: 18px;
   height: 18px;
   flex: none;
