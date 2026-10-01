@@ -368,6 +368,49 @@ export function App() {
     if (ok) setSelection(null);
   }, [selection, apply]);
 
+  // ---- Expand / shrink the node selection along edges (+ / -).
+  // Each expansion is remembered so "-" can step back, as long as the selection
+  // has not been changed some other way in between.
+  const [expansions, setExpansions] = useState<{ before: Selection; after: string[] }[]>([]);
+  const selectedNodeIds = useMemo(
+    () => (selection?.kind === 'node' ? [selection.id] : selection?.kind === 'nodes' ? selection.ids : []),
+    [selection],
+  );
+  const sameIds = (a: string[], b: string[]) => a.length === b.length && a.every((id) => b.includes(id));
+  const lastExpansion = expansions.length && sameIds(expansions[expansions.length - 1].after, selectedNodeIds)
+    ? expansions[expansions.length - 1]
+    : null;
+  const nodeSelection = (ids: string[]): Selection =>
+    ids.length === 0 ? null : ids.length === 1 ? { kind: 'node', id: ids[0] } : { kind: 'nodes', ids };
+
+  const canExpand = useMemo(() => {
+    const sel = new Set(selectedNodeIds);
+    return graph.edges.some((e) => sel.has(e.source) && !sel.has(e.target));
+  }, [graph.edges, selectedNodeIds]);
+
+  const expandSelection = useCallback(() => {
+    const sel = new Set(selectedNodeIds);
+    const added = graph.edges.filter((e) => sel.has(e.source) && !sel.has(e.target)).map((e) => e.target);
+    if (!added.length) return;
+    const after = [...selectedNodeIds, ...new Set(added)];
+    setExpansions((stack) => [...(lastExpansion ? stack : []), { before: selection, after }]);
+    setSelection(nodeSelection(after));
+  }, [graph.edges, lastExpansion, selectedNodeIds, selection]);
+
+  const shrinkSelection = useCallback(() => {
+    if (!lastExpansion) return;
+    const exists = new Set(graph.nodes.map((n) => n.id));
+    const before = lastExpansion.before;
+    setExpansions((stack) => stack.slice(0, -1));
+    setSelection(
+      before?.kind === 'nodes'
+        ? nodeSelection(before.ids.filter((id) => exists.has(id)))
+        : before?.kind === 'node' && !exists.has(before.id)
+          ? null
+          : before,
+    );
+  }, [graph.nodes, lastExpansion]);
+
   const startConnect = useCallback((source: string | null = null) => {
     setConnect({ source });
     toast(source ? 'Click the target node' : 'Click the source node, then the target node');
@@ -623,6 +666,13 @@ export function App() {
           if (connect) setConnect(null);
           else startConnect(selection?.kind === 'node' ? selection.id : null);
           break;
+        case '+':
+        case '=':
+          expandSelection();
+          break;
+        case '-':
+          shrinkSelection();
+          break;
         case 'Delete':
         case 'Backspace':
           deleteSelection();
@@ -651,7 +701,7 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [addNodeInView, connect, deleteSelection, helpOpen, mcpOpen, openAction, redo, save, selection, startConnect, stylesOpen, undo]);
+  }, [addNodeInView, connect, deleteSelection, expandSelection, helpOpen, mcpOpen, openAction, redo, save, selection, shrinkSelection, startConnect, stylesOpen, undo]);
 
   return (
     <div className="app">
@@ -732,6 +782,28 @@ export function App() {
             onClick={() => (connect ? setConnect(null) : startConnect(selection?.kind === 'node' ? selection.id : null))}
           >
             ⟶ Connect
+          </button>
+          <button
+            className="btn ghost icon"
+            data-tip="Expand selection (+): add the targets of edges leaving the selected nodes"
+            aria-label="Expand selection to edge targets"
+            disabled={!canExpand}
+            onClick={expandSelection}
+          >
+            <svg className="expand-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+            </svg>
+          </button>
+          <button
+            className="btn ghost icon"
+            data-tip="Shrink selection (−): undo the last expansion"
+            aria-label="Undo last selection expansion"
+            disabled={!lastExpansion}
+            onClick={shrinkSelection}
+          >
+            <svg className="expand-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7" />
+            </svg>
           </button>
           <button className="btn ghost" data-tip="Delete the selection (Del)" disabled={!selection} onClick={deleteSelection}>
             Delete
