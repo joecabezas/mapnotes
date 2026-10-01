@@ -15,6 +15,7 @@ import {
   recallHandle,
   rememberHandle,
 } from './fileAccess';
+import { createFilePoll } from './filePoll';
 import { writeFileText as writeTracked } from './fileSync';
 import type { ThemeName } from './theme';
 
@@ -270,28 +271,31 @@ export function App() {
   const watchedHandle = file && file.status !== 'reconnect' ? file.handle : null;
   useEffect(() => {
     if (!watchedHandle) return;
+    const poll = createFilePoll({
+      handle: watchedHandle,
+      modified: fileModified,
+      text: fileText,
+      writing: writingText,
+      onChange: (next, list) => {
+        setGraph(next, { fromRemote: true });
+        setFile((f) => (f?.handle === watchedHandle ? { ...f, status: list.length ? 'paused' : 'saved' } : f));
+        setIssues(list.length ? { source: watchedHandle.name, list } : null);
+      },
+      // A half-written or invalid file is retried on every poll and reported once per revision.
+      onUnreadable: (err) => toast(`Could not read ${watchedHandle.name}, retrying: ${err.message}`, 'error'),
+      // A missing file is reported once.
+      onMissing: () => {
+        if (fileRef.current?.status === 'error') return;
+        setFile((f) => (f?.handle === watchedHandle ? { ...f, status: 'error' } : f));
+        toast(`${watchedHandle.name} was moved or deleted`, 'error');
+      },
+    });
     let busy = false;
     const timer = setInterval(async () => {
       if (busy || fileRef.current?.status === 'saving') return;
       busy = true;
       try {
-        const current = await watchedHandle.getFile();
-        if (current.lastModified === fileModified.current) return;
-        fileModified.current = current.lastModified;
-        const text = await current.text();
-        if (text === fileText.current || text === writingText.current) return;
-        const list: string[] = [];
-        const next = parseGraphText(text, list);
-        fileText.current = text;
-        setGraph(next, { fromRemote: true });
-        setFile((f) => (f?.handle === watchedHandle ? { ...f, status: list.length ? 'paused' : 'saved' } : f));
-        setIssues(list.length ? { source: watchedHandle.name, list } : null);
-      } catch (err) {
-        // A half-written or invalid file is skipped until the next change; a missing one is reported once.
-        if ((err as DOMException).name === 'NotFoundError' && fileRef.current?.status !== 'error') {
-          setFile((f) => (f?.handle === watchedHandle ? { ...f, status: 'error' } : f));
-          toast(`${watchedHandle.name} was moved or deleted`, 'error');
-        }
+        await poll();
       } finally {
         busy = false;
       }
