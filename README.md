@@ -11,6 +11,7 @@ A render engine for your own graphs. Model anything as nodes and edges (pull req
 npm install
 npm run dev                          # dev server with hot reload at http://localhost:5173
 npm run build                        # static site in dist/
+npm test                             # regression tests (vitest)
 ```
 
 The web app is a static site with no backend. How it saves depends on the browser:
