@@ -4,12 +4,14 @@
 //
 // When a graph file is open, every change is written to it immediately.
 // Before each operation the file is re-read, so edits made in the browser are
-// never overwritten with stale data.
+// never overwritten with stale data. If the file disappears after it has been
+// read or written, operations fail instead of recreating it with only the new
+// change; the last known graph is kept so save_graph can recover it.
 import path from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { readGraphFile, writeGraphFile } from '../shared/fileStore.ts';
+import { readGraphFileIfExists, writeGraphFile } from '../shared/fileStore.ts';
 import {
   ARROW_SHAPES,
   CURVE_STYLES,
@@ -31,14 +33,42 @@ import { formatForPath, serializeGraph } from '../shared/yaml.ts';
 
 let currentFile: string | undefined;
 let memoryGraph: Graph = emptyGraph();
+/** True once currentFile has existed on disk (read or written); its disappearance is then an error. */
+let linked = false;
+
+class MissingFileError extends Error {}
+
+/** Makes `file` the current file. A missing file starts an empty graph. */
+async function open(file: string): Promise<Graph> {
+  const graph = await readGraphFileIfExists(file);
+  currentFile = file;
+  linked = graph !== undefined;
+  memoryGraph = graph ?? emptyGraph();
+  return memoryGraph;
+}
 
 async function current(): Promise<Graph> {
-  return currentFile ? readGraphFile(currentFile) : memoryGraph;
+  if (!currentFile) return memoryGraph;
+  const graph = await readGraphFileIfExists(currentFile);
+  if (graph) {
+    linked = true;
+    memoryGraph = graph;
+    return graph;
+  }
+  if (linked) {
+    throw new MissingFileError(
+      `${currentFile} was moved or deleted. The last known graph (${summary(memoryGraph)}) is kept in memory: call save_graph to write it back (optionally to a new path), or load_graph to open another file.`,
+    );
+  }
+  return memoryGraph;
 }
 
 async function commit(graph: Graph): Promise<void> {
   memoryGraph = graph;
-  if (currentFile) await writeGraphFile(currentFile, graph);
+  if (currentFile) {
+    await writeGraphFile(currentFile, graph);
+    linked = true;
+  }
 }
 
 function where(): string {
@@ -82,9 +112,7 @@ server.registerTool(
   },
   safe(async ({ path: p }) => {
     const file = path.resolve(p);
-    const graph = await readGraphFile(file);
-    currentFile = file;
-    memoryGraph = graph;
+    const graph = await open(file);
     return ok(`Loaded ${file}: ${summary(graph)}`);
   }),
 );
@@ -98,11 +126,17 @@ server.registerTool(
     inputSchema: { path: z.string().optional().describe('Destination file; defaults to the current file') },
   },
   safe(async ({ path: p }) => {
-    const graph = await current();
+    // A vanished current file is recovered from the last known graph.
+    const graph = await current().catch((err) => {
+      if (err instanceof MissingFileError) return memoryGraph;
+      throw err;
+    });
     const file = p ? path.resolve(p) : currentFile;
     if (!file) throw new Error('No current file; pass a path');
     await writeGraphFile(file, graph);
     currentFile = file;
+    linked = true;
+    memoryGraph = graph;
     return ok(`Saved ${summary(graph)} to ${file} (${formatForPath(file)})`);
   }),
 );
@@ -331,10 +365,7 @@ server.registerTool(
 );
 
 const initial = process.argv[2];
-if (initial) {
-  currentFile = path.resolve(initial);
-  memoryGraph = await readGraphFile(currentFile);
-}
+if (initial) await open(path.resolve(initial));
 
 await server.connect(new StdioServerTransport());
 console.error(`mapnotes MCP server ready${currentFile ? ` (file: ${currentFile})` : ''}`);

@@ -5,11 +5,16 @@ import { emptyGraph, type Graph } from './model.ts';
 import { formatForPath, parseGraphText, serializeGraph } from './yaml.ts';
 
 export async function readGraphFile(file: string): Promise<Graph> {
+  return (await readGraphFileIfExists(file)) ?? emptyGraph();
+}
+
+/** Like readGraphFile, but returns undefined instead of an empty graph when the file is missing. */
+export async function readGraphFileIfExists(file: string): Promise<Graph | undefined> {
   let text: string;
   try {
     text = await fs.readFile(file, 'utf8');
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return emptyGraph();
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
     throw err;
   }
   return parseGraphText(text);
