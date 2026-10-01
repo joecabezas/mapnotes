@@ -92,6 +92,17 @@ export interface EdgeStyle {
 
 export type Style = NodeStyle | EdgeStyle;
 
+/** Style fields that only apply to one target. */
+export const NODE_ONLY_STYLE_FIELDS = ['borderColor', 'shape', 'size', 'icon', 'iconColor', 'iconSize'] as const;
+export const EDGE_ONLY_STYLE_FIELDS = ['width', 'lineStyle', 'arrow', 'curve'] as const;
+
+/** Accepted ranges for numeric style values. */
+export const STYLE_LIMITS = {
+  size: { min: 8, max: 300 },
+  iconSize: { min: 10, max: 100 },
+  width: { min: 1, max: 20 },
+} as const;
+
 export interface Graph {
   properties: GraphProperty[];
   styles: Style[];
@@ -459,6 +470,32 @@ export function editGraphProperties(
   input: { set?: KeyValue[]; remove?: string[]; properties?: KeyValue[] },
 ): Graph {
   return { ...g, properties: mergeProperties(input.properties ?? g.properties, input.set, input.remove) };
+}
+
+/**
+ * Rejects style input that `normalizeStyle` would silently drop or render
+ * badly: fields meant for the other target and out-of-range numbers.
+ */
+export function validateStyleInput(input: { target: Style['target'] } & Record<string, unknown>): void {
+  const foreign = (input.target === 'edge' ? NODE_ONLY_STYLE_FIELDS : EDGE_ONLY_STYLE_FIELDS).filter(
+    (k) => input[k] !== undefined,
+  );
+  if (foreign.length) {
+    const other = input.target === 'edge' ? 'node' : 'edge';
+    const allowed = input.target === 'edge' ? EDGE_ONLY_STYLE_FIELDS : NODE_ONLY_STYLE_FIELDS;
+    throw new GraphError(
+      `${foreign.map((k) => `"${k}"`).join(', ')} only appl${foreign.length === 1 ? 'ies' : 'y'} to ${other} styles; ` +
+        `remove ${foreign.length === 1 ? 'it' : 'them'} or set target to "${other}". ` +
+        `${input.target[0].toUpperCase()}${input.target.slice(1)} styles accept: name, color, textColor, ${allowed.join(', ')}`,
+    );
+  }
+  for (const [k, { min, max }] of Object.entries(STYLE_LIMITS)) {
+    const v = input[k];
+    if (v === undefined) continue;
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < min || v > max) {
+      throw new GraphError(`"${k}" must be a number between ${min} and ${max} (got ${JSON.stringify(v)})`);
+    }
+  }
 }
 
 /** Creates or replaces a style (matched by id). */
