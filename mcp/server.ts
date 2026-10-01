@@ -24,10 +24,12 @@ import {
   type Graph,
   LINE_STYLES,
   NODE_SHAPES,
+  STYLE_LIMITS,
   removeEdge,
   removeNode,
   removeStyle,
   upsertStyle,
+  validateStyleInput,
 } from '../shared/model.ts';
 import { DEFAULT_FIND_LIMIT, MAX_FIND_LIMIT, findNodes } from '../shared/search.ts';
 import { formatForPath, serializeGraph } from '../shared/yaml.ts';
@@ -365,7 +367,7 @@ server.registerTool(
   {
     title: 'Create or replace style',
     description:
-      'Create or replace (by id) a reusable style in the graph styles. Assign it via the "style" field of nodes/edges. Colors are CSS colors, e.g. "#7aa2f7".',
+      'Create or replace (by id) a reusable style in the graph styles. Assign it via the "style" field of nodes/edges. Colors are CSS colors, e.g. "#7aa2f7". Fields marked "Nodes only" / "Edges only" are rejected for the other target.',
     inputSchema: {
       id: z.string(),
       target: z.enum(['node', 'edge']),
@@ -374,7 +376,12 @@ server.registerTool(
       textColor: z.string().optional(),
       borderColor: z.string().optional().describe('Nodes only'),
       shape: z.enum(NODE_SHAPES).optional().describe('Nodes only'),
-      size: z.number().optional().describe('Nodes only, in px (default 36)'),
+      size: z
+        .number()
+        .min(STYLE_LIMITS.size.min)
+        .max(STYLE_LIMITS.size.max)
+        .optional()
+        .describe(`Nodes only, in px, ${STYLE_LIMITS.size.min}-${STYLE_LIMITS.size.max} (default 36)`),
       icon: z
         .string()
         .optional()
@@ -382,14 +389,27 @@ server.registerTool(
           'Nodes only, icon drawn inside the node. A full-color brand logo from svgl by its library file name without .svg (https://svgl.app), e.g. "slack", "linear", "github_dark"; or a Lucide line icon as "lucide:<name>" (https://lucide.dev/icons), e.g. "lucide:folder", "lucide:bug"',
         ),
       iconColor: z.string().optional().describe('Nodes only, color of Lucide icons (default: black or white to suit the fill)'),
-      iconSize: z.number().optional().describe('Nodes only, icon size as a percentage of the node (default 70)'),
-      width: z.number().optional().describe('Edges only, line width in px'),
+      iconSize: z
+        .number()
+        .min(STYLE_LIMITS.iconSize.min)
+        .max(STYLE_LIMITS.iconSize.max)
+        .optional()
+        .describe(
+          `Nodes only, icon size as a percentage of the node, ${STYLE_LIMITS.iconSize.min}-${STYLE_LIMITS.iconSize.max} (default 70)`,
+        ),
+      width: z
+        .number()
+        .min(STYLE_LIMITS.width.min)
+        .max(STYLE_LIMITS.width.max)
+        .optional()
+        .describe(`Edges only, line width in px, ${STYLE_LIMITS.width.min}-${STYLE_LIMITS.width.max}`),
       lineStyle: z.enum(LINE_STYLES).optional().describe('Edges only'),
       arrow: z.enum(ARROW_SHAPES).optional().describe('Edges only, target arrow shape'),
       curve: z.enum(CURVE_STYLES).optional().describe('Edges only'),
     },
   },
   safe(exclusive(async (args) => {
+    validateStyleInput(args);
     const { graph, style } = upsertStyle(await current(), args);
     await commit(graph);
     return ok(`Style "${style.id}" saved (${where()})`);
