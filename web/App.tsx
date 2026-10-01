@@ -19,6 +19,7 @@ import {
 import { createFilePoll } from './filePoll';
 import { writeFileText as writeTracked, writeFileTextIfUnchanged as writeTrackedIfUnchanged } from './fileSync';
 import type { ThemeName } from './theme';
+import logoUrl from './logo.svg';
 
 const LOCAL_KEY = 'mapnotes:graph';
 const THEME_KEY = 'mapnotes:theme';
@@ -739,7 +740,7 @@ export function App() {
           <span aria-hidden="true"><i /><i /><i /></span>
         </button>
         <div className="brand" data-tip="MapNotes: a render engine for your graphs">
-          <span className="logo">◉</span> <span className="brand-name">MapNotes</span>
+          <img className="logo" src={logoUrl} alt="" aria-hidden="true" /> <span className="brand-name">MapNotes</span>
         </div>
 
         <div className="toolbar-actions">
