@@ -3,3 +3,4 @@ dist
 *.tmp
 prompt.txt
 .claude/settings.local.json
+*:Zone.Identifier
