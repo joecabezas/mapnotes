@@ -44,12 +44,17 @@ let linked = false;
 
 class MissingFileError extends Error {}
 
+/** Entries of the current file that could not be read (and would be lost if it were rewritten). */
+let fileIssues: string[] = [];
+
 /** Makes `file` the current file. A missing file starts an empty graph. */
 async function open(file: string): Promise<Graph> {
-  const graph = await readGraphFileIfExists(file);
+  const issues: string[] = [];
+  const graph = await readGraphFileIfExists(file, issues);
   currentFile = file;
   linked = graph !== undefined;
   memoryGraph = graph ?? emptyGraph();
+  fileIssues = issues;
   return memoryGraph;
 }
 
@@ -70,10 +75,12 @@ function exclusive<A, R>(fn: (args: A) => Promise<R>) {
 
 async function current(): Promise<Graph> {
   if (!currentFile) return memoryGraph;
-  const graph = await readGraphFileIfExists(currentFile);
+  const issues: string[] = [];
+  const graph = await readGraphFileIfExists(currentFile, issues);
   if (graph) {
     linked = true;
     memoryGraph = graph;
+    fileIssues = issues;
     return graph;
   }
   if (linked) {
@@ -84,7 +91,17 @@ async function current(): Promise<Graph> {
   return memoryGraph;
 }
 
+function issueList(issues: string[]): string {
+  return issues.map((i) => `\n- ${i}`).join('');
+}
+
+// Automatic saves never drop entries silently: an explicit save_graph is needed to overwrite such a file.
 async function commit(graph: Graph): Promise<void> {
+  if (currentFile && fileIssues.length) {
+    throw new Error(
+      `Not saved: ${currentFile} has ${fileIssues.length} invalid entr${fileIssues.length === 1 ? 'y' : 'ies'} that would be lost:${issueList(fileIssues)}\nFix the file, or call save_graph to overwrite it without them.`,
+    );
+  }
   memoryGraph = graph;
   if (currentFile) {
     await writeGraphFile(currentFile, graph);
@@ -149,6 +166,7 @@ const position = z.object({ x: z.number(), y: z.number() });
 
 // Output schemas: the structured content returned alongside each tool's text.
 const fileOut = z.string().nullable().describe('Current graph file; null when the graph is in memory only');
+const issuesOut = z.array(z.string()).describe('Invalid file entries that were skipped when reading it');
 const countsOut = z.object({ nodes: z.number(), edges: z.number(), styles: z.number(), properties: z.number() });
 const nodeOut = z.object({
   id: z.string(),
@@ -182,12 +200,18 @@ server.registerTool(
     description:
       'Open a graph file (YAML, or JSON if it ends in .json). It becomes the current file: all later changes are saved to it automatically. A missing file starts an empty graph.',
     inputSchema: { path: z.string().describe('Path to the graph file') },
-    outputSchema: { file: z.string(), counts: countsOut },
+    outputSchema: { file: z.string(), counts: countsOut, issues: issuesOut },
   },
   safe(exclusive(async ({ path: p }) => {
     const file = path.resolve(p);
     const graph = await open(file);
-    return ok(`Loaded ${file}: ${summary(graph)}`, { file, counts: counts(graph) });
+    const issues = fileIssues;
+    const data = { file, counts: counts(graph), issues };
+    if (!issues.length) return ok(`Loaded ${file}: ${summary(graph)}`, data);
+    return ok(
+      `Loaded ${file}: ${summary(graph)}\nWarning: ${issues.length} invalid entr${issues.length === 1 ? 'y was' : 'ies were'} skipped:${issueList(issues)}\nChanges will not be saved automatically until the file is fixed or save_graph is called to overwrite it without them.`,
+      data,
+    );
   })),
 );
 
@@ -198,7 +222,7 @@ server.registerTool(
     description:
       'Save the current graph. With a path, saves a copy there (format from the extension: .json → JSON, otherwise YAML) and makes it the current file.',
     inputSchema: { path: z.string().optional().describe('Destination file; defaults to the current file') },
-    outputSchema: { file: z.string(), format: z.enum(['yaml', 'json']), counts: countsOut },
+    outputSchema: { file: z.string(), format: z.enum(['yaml', 'json']), counts: countsOut, dropped: issuesOut },
   },
   safe(exclusive(async ({ path: p }) => {
     // A vanished current file is recovered from the last known graph.
@@ -206,14 +230,17 @@ server.registerTool(
       if (err instanceof MissingFileError) return memoryGraph;
       throw err;
     });
+    const dropped = currentFile ? fileIssues : [];
     const file = p ? path.resolve(p) : currentFile;
     if (!file) throw new Error('No current file; pass a path');
     await writeGraphFile(file, graph);
     currentFile = file;
     linked = true;
     memoryGraph = graph;
+    fileIssues = [];
     const format = formatForPath(file);
-    return ok(`Saved ${summary(graph)} to ${file} (${format})`, { file, format, counts: counts(graph) });
+    const note = dropped.length ? `\nDropped ${dropped.length} invalid entr${dropped.length === 1 ? 'y' : 'ies'}:${issueList(dropped)}` : '';
+    return ok(`Saved ${summary(graph)} to ${file} (${format})${note}`, { file, format, counts: counts(graph), dropped });
   })),
 );
 
@@ -224,14 +251,17 @@ server.registerTool(
     description:
       'Return the whole current graph (properties, styles, nodes, edges). YAML output starts with a comment naming the current file; JSON output is plain JSON.',
     inputSchema: { format: z.enum(['yaml', 'json']).optional().describe('Output format, default yaml') },
-    outputSchema: { file: fileOut, graph: graphOut },
+    outputSchema: { file: fileOut, graph: graphOut, issues: issuesOut },
     annotations: { readOnlyHint: true },
   },
   safe(async ({ format }) => {
     const graph = await current();
-    if (format === 'json') return ok(serializeGraph(graph, 'json'), { file: currentFile ?? null, graph });
-    const header = currentFile ? `# ${currentFile}\n` : '# (unsaved graph)\n';
-    return ok(header + serializeGraph(graph, 'yaml'), { file: currentFile ?? null, graph });
+    const issues = currentFile ? fileIssues : [];
+    const data = { file: currentFile ?? null, graph, issues };
+    if (format === 'json') return ok(serializeGraph(graph, 'json'), data);
+    const warnings = issues.map((i) => `# Warning: ${i}\n`).join('');
+    const header = (currentFile ? `# ${currentFile}\n` : '# (unsaved graph)\n') + warnings;
+    return ok(header + serializeGraph(graph, 'yaml'), data);
   }),
 );
 
@@ -521,7 +551,10 @@ server.registerTool(
 );
 
 const initial = process.argv[2];
-if (initial) await open(path.resolve(initial));
+if (initial) {
+  await open(path.resolve(initial));
+  for (const issue of fileIssues) console.error(`Warning: ${currentFile}: ${issue}`);
+}
 
 await server.connect(new StdioServerTransport());
 console.error(`mapnotes MCP server ready${currentFile ? ` (file: ${currentFile})` : ''}`);

@@ -513,6 +513,31 @@ code,
   z-index: 6;
 }
 
+.issues {
+  position: absolute;
+  bottom: 16px;
+  left: calc((100% - 330px) / 2);
+  transform: translateX(-50%);
+  width: min(560px, calc(100% - 32px));
+  padding: 10px 14px;
+  background: var(--panel);
+  border: 1px solid var(--danger);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  font-size: 13px;
+  z-index: 6;
+}
+.issues ul {
+  max-height: 160px;
+  overflow: auto;
+  margin: 6px 0 10px;
+  padding-left: 18px;
+  color: var(--muted);
+}
+.sync.paused .dot {
+  background: var(--danger);
+}
+
 .empty {
   position: absolute;
   top: 50%;
@@ -1018,6 +1043,7 @@ code,
     display: none;
   }
   .banner,
+  .issues,
   .empty {
     left: 50%;
   }

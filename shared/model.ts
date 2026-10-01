@@ -198,7 +198,26 @@ export function normalizeStyle(v: unknown): Style | undefined {
   });
 }
 
-export function normalizeGraph(input: unknown): Graph {
+/** Describes an entry `where` (e.g. "nodes[2]") for diagnostics, using its id when it has one. */
+function entryName(section: string, index: number, raw: unknown): string {
+  const id = isObject(raw) ? str(raw.id) : undefined;
+  return id ? `${section}[${index}] ("${id}")` : `${section}[${index}]`;
+}
+
+/** Returns the section as a list; anything else present is reported and treated as empty. */
+function section(input: Record<string, unknown>, key: string, issues?: string[]): unknown[] {
+  const v = input[key];
+  if (Array.isArray(v)) return v;
+  if (v !== undefined && v !== null) issues?.push(`"${key}" must be a list; it was ignored`);
+  return [];
+}
+
+/**
+ * Normalises untrusted graph data. Entries that cannot be kept (malformed
+ * nodes, styles or edges, duplicate style ids) are dropped and described in
+ * `issues`, so callers can show them before the cleaned-up graph is saved.
+ */
+export function normalizeGraph(input: unknown, issues?: string[]): Graph {
   if (input === undefined || input === null) return emptyGraph();
   if (!isObject(input)) throw new GraphError('Graph file must contain a mapping at the top level');
 
@@ -210,16 +229,26 @@ export function normalizeGraph(input: unknown): Graph {
   };
 
   const seenStyles = new Set<string>();
-  for (const raw of Array.isArray(input.styles) ? input.styles : []) {
+  section(input, 'styles', issues).forEach((raw, i) => {
     const s = normalizeStyle(raw);
-    if (!s || seenStyles.has(s.id)) continue;
+    if (!s) {
+      issues?.push(`${entryName('styles', i, raw)} was dropped: ${isObject(raw) ? 'it has no "id"' : 'it is not a mapping'}`);
+      return;
+    }
+    if (seenStyles.has(s.id)) {
+      issues?.push(`${entryName('styles', i, raw)} was dropped: duplicate style id "${s.id}" (the first one is kept)`);
+      return;
+    }
     seenStyles.add(s.id);
     graph.styles.push(s);
-  }
+  });
 
   const seenNodes = new Set<string>();
-  for (const raw of Array.isArray(input.nodes) ? input.nodes : []) {
-    if (!isObject(raw) || !str(raw.id)) continue;
+  section(input, 'nodes', issues).forEach((raw, i) => {
+    if (!isObject(raw) || !str(raw.id)) {
+      issues?.push(`${entryName('nodes', i, raw)} was dropped: ${isObject(raw) ? 'it has no "id"' : 'it is not a mapping'}`);
+      return;
+    }
     const id = str(raw.id)!;
     if (seenNodes.has(id)) throw new GraphError(`Duplicate node id "${id}"`);
     seenNodes.add(id);
@@ -235,9 +264,9 @@ export function normalizeGraph(input: unknown): Graph {
         properties: normalizeKeyValues(raw.properties),
       }),
     );
-  }
+  });
 
-  const rawEdges = Array.isArray(input.edges) ? input.edges : [];
+  const rawEdges = section(input, 'edges', issues);
   // Generated IDs must avoid every explicit ID, including ones that appear later.
   const explicitEdgeIds = new Set<string>();
   for (const raw of rawEdges) {
@@ -246,11 +275,17 @@ export function normalizeGraph(input: unknown): Graph {
   }
   const seenEdges = new Set<string>();
   let auto = 0;
-  for (const raw of rawEdges) {
-    if (!isObject(raw)) continue;
+  rawEdges.forEach((raw, i) => {
+    if (!isObject(raw)) {
+      issues?.push(`${entryName('edges', i, raw)} was dropped: it is not a mapping`);
+      return;
+    }
     const source = str(raw.source);
     const target = str(raw.target);
-    if (!source || !target) continue;
+    if (!source || !target) {
+      issues?.push(`${entryName('edges', i, raw)} was dropped: it needs both a "source" and a "target"`);
+      return;
+    }
     if (!seenNodes.has(source) || !seenNodes.has(target)) {
       throw new GraphError(`Edge ${str(raw.id) ?? `${source}->${target}`} references a missing node`);
     }
@@ -271,7 +306,7 @@ export function normalizeGraph(input: unknown): Graph {
         properties: normalizeKeyValues(raw.properties),
       }),
     );
-  }
+  });
 
   return graph;
 }

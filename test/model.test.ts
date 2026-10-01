@@ -133,8 +133,7 @@ describe('normalizeGraph', () => {
     ]);
   });
 
-  // Current behavior; TODO.md "Report invalid graph entries instead of silently dropping them"
-  // will turn these into diagnostics.
+  // The dropped entries are reported as diagnostics; see the tests below and test/validation.test.ts.
   it('currently drops malformed entries and keeps the first duplicate style', () => {
     const g = normalizeGraph({
       styles: [{ id: 's', color: 'red' }, { id: 's', color: 'blue' }, { color: 'green' }],
@@ -146,9 +145,21 @@ describe('normalizeGraph', () => {
     expect(g.edges).toEqual([]);
   });
 
-  it.todo('reports an invalid node as a diagnostic (TODO.md: report invalid graph entries)');
-  it.todo('reports an invalid edge as a diagnostic (TODO.md: report invalid graph entries)');
-  it.todo('reports a duplicate style id as a diagnostic (TODO.md: report invalid graph entries)');
+  it('reports an invalid node as a diagnostic (TODO.md: report invalid graph entries)', () => {
+    const issues: string[] = [];
+    normalizeGraph({ nodes: [{ id: 'a' }, { label: 'no id' }] }, issues);
+    expect(issues).toEqual(['nodes[1] was dropped: it has no "id"']);
+  });
+  it('reports an invalid edge as a diagnostic (TODO.md: report invalid graph entries)', () => {
+    const issues: string[] = [];
+    normalizeGraph({ nodes: [{ id: 'a' }], edges: [{ id: 'x', source: 'a' }] }, issues);
+    expect(issues).toEqual(['edges[0] ("x") was dropped: it needs both a "source" and a "target"']);
+  });
+  it('reports a duplicate style id as a diagnostic (TODO.md: report invalid graph entries)', () => {
+    const issues: string[] = [];
+    normalizeGraph({ styles: [{ id: 's' }, { id: 's' }] }, issues);
+    expect(issues).toEqual(['styles[1] ("s") was dropped: duplicate style id "s" (the first one is kept)']);
+  });
 });
 
 describe('normalizeKeyValues', () => {
