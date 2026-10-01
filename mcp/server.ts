@@ -48,6 +48,21 @@ async function open(file: string): Promise<Graph> {
   return memoryGraph;
 }
 
+// Tool calls can arrive concurrently. Every handler that reads the graph and
+// then writes a replacement (or switches the current file) runs through this
+// queue, so two calls never read the same revision and the later write never
+// discards the earlier edit.
+let queue: Promise<unknown> = Promise.resolve();
+
+/** Wraps a handler so it runs only after all previously queued handlers finish. */
+function exclusive<A, R>(fn: (args: A) => Promise<R>) {
+  return (args: A): Promise<R> => {
+    const run = queue.then(() => fn(args));
+    queue = run.catch(() => {});
+    return run;
+  };
+}
+
 async function current(): Promise<Graph> {
   if (!currentFile) return memoryGraph;
   const graph = await readGraphFileIfExists(currentFile);
@@ -111,11 +126,11 @@ server.registerTool(
       'Open a graph file (YAML, or JSON if it ends in .json). It becomes the current file: all later changes are saved to it automatically. A missing file starts an empty graph.',
     inputSchema: { path: z.string().describe('Path to the graph file') },
   },
-  safe(async ({ path: p }) => {
+  safe(exclusive(async ({ path: p }) => {
     const file = path.resolve(p);
     const graph = await open(file);
     return ok(`Loaded ${file}: ${summary(graph)}`);
-  }),
+  })),
 );
 
 server.registerTool(
@@ -126,7 +141,7 @@ server.registerTool(
       'Save the current graph. With a path, saves a copy there (format from the extension: .json → JSON, otherwise YAML) and makes it the current file.',
     inputSchema: { path: z.string().optional().describe('Destination file; defaults to the current file') },
   },
-  safe(async ({ path: p }) => {
+  safe(exclusive(async ({ path: p }) => {
     // A vanished current file is recovered from the last known graph.
     const graph = await current().catch((err) => {
       if (err instanceof MissingFileError) return memoryGraph;
@@ -139,7 +154,7 @@ server.registerTool(
     linked = true;
     memoryGraph = graph;
     return ok(`Saved ${summary(graph)} to ${file} (${formatForPath(file)})`);
-  }),
+  })),
 );
 
 server.registerTool(
@@ -219,11 +234,11 @@ server.registerTool(
       properties: kvList.optional(),
     },
   },
-  safe(async (args) => {
+  safe(exclusive(async (args) => {
     const { graph, node } = addNode(await current(), args);
     await commit(graph);
     return ok(`Added node "${node.id}" (${where()})`);
-  }),
+  })),
 );
 
 server.registerTool(
@@ -243,11 +258,11 @@ server.registerTool(
       properties: kvList.optional(),
     },
   },
-  safe(async (args) => {
+  safe(exclusive(async (args) => {
     const { graph, node } = editNode(await current(), args);
     await commit(graph);
     return ok(`Updated node "${node.id}" (${where()})\n${JSON.stringify(node, null, 2)}`);
-  }),
+  })),
 );
 
 server.registerTool(
@@ -258,12 +273,12 @@ server.registerTool(
     inputSchema: { id: z.string() },
     annotations: { destructiveHint: true },
   },
-  safe(async ({ id }) => {
+  safe(exclusive(async ({ id }) => {
     const { graph, removedEdges } = removeNode(await current(), id);
     await commit(graph);
     const extra = removedEdges.length ? `, plus edge(s) ${removedEdges.join(', ')}` : '';
     return ok(`Removed node "${id}"${extra} (${where()})`);
-  }),
+  })),
 );
 
 server.registerTool(
@@ -280,11 +295,11 @@ server.registerTool(
       properties: kvList.optional(),
     },
   },
-  safe(async (args) => {
+  safe(exclusive(async (args) => {
     const { graph, edge } = addEdge(await current(), args);
     await commit(graph);
     return ok(`Added edge "${edge.id}" ${edge.source} → ${edge.target} (${where()})`);
-  }),
+  })),
 );
 
 server.registerTool(
@@ -305,11 +320,11 @@ server.registerTool(
       properties: kvList.optional(),
     },
   },
-  safe(async (args) => {
+  safe(exclusive(async (args) => {
     const { graph, edge } = editEdge(await current(), args);
     await commit(graph);
     return ok(`Updated edge "${edge.id}" (${where()})\n${JSON.stringify(edge, null, 2)}`);
-  }),
+  })),
 );
 
 server.registerTool(
@@ -320,10 +335,10 @@ server.registerTool(
     inputSchema: { id: z.string() },
     annotations: { destructiveHint: true },
   },
-  safe(async ({ id }) => {
+  safe(exclusive(async ({ id }) => {
     await commit(removeEdge(await current(), id));
     return ok(`Removed edge "${id}" (${where()})`);
-  }),
+  })),
 );
 
 server.registerTool(
@@ -338,11 +353,11 @@ server.registerTool(
       properties: kvList.optional(),
     },
   },
-  safe(async (args) => {
+  safe(exclusive(async (args) => {
     const graph = editGraphProperties(await current(), args);
     await commit(graph);
     return ok(`Graph properties: ${JSON.stringify(graph.properties)} (${where()})`);
-  }),
+  })),
 );
 
 server.registerTool(
@@ -374,11 +389,11 @@ server.registerTool(
       curve: z.enum(CURVE_STYLES).optional().describe('Edges only'),
     },
   },
-  safe(async (args) => {
+  safe(exclusive(async (args) => {
     const { graph, style } = upsertStyle(await current(), args);
     await commit(graph);
     return ok(`Style "${style.id}" saved (${where()})`);
-  }),
+  })),
 );
 
 server.registerTool(
@@ -389,10 +404,10 @@ server.registerTool(
     inputSchema: { id: z.string() },
     annotations: { destructiveHint: true },
   },
-  safe(async ({ id }) => {
+  safe(exclusive(async ({ id }) => {
     await commit(removeStyle(await current(), id));
     return ok(`Removed style "${id}" (${where()})`);
-  }),
+  })),
 );
 
 const initial = process.argv[2];
