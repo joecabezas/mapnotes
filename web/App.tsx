@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import sampleYaml from '../examples/pr-tracking.yaml?raw';
 import { addEdge, addNode, emptyGraph, type Graph, type Position, removeEdge, removeNode } from '../shared/model';
 import { formatForPath, parseGraphText, serializeGraph, serializeGraphYaml } from '../shared/yaml';
 import { GraphCanvas, type GraphCanvasHandle, LAYOUTS, type LayoutName, type Selection } from './components/GraphCanvas';
@@ -201,10 +200,13 @@ export function App() {
   // ---- Initial load: the browser copy first, then the file linked last time (if any).
   useEffect(() => {
     let initial = emptyGraph();
-    try {
-      initial = parseGraphText(storageGet(LOCAL_KEY) ?? sampleYaml);
-    } catch {
-      initial = parseGraphText(sampleYaml);
+    const saved = storageGet(LOCAL_KEY);
+    if (saved) {
+      try {
+        initial = parseGraphText(saved);
+      } catch {
+        // Unreadable browser copy: start empty.
+      }
     }
     resetGraph(initial);
     setLoaded(true);
@@ -444,19 +446,12 @@ export function App() {
     }
   }, [reconnectFile, saveAs, saveToNewFile, toast]);
 
-  // New and example graphs are unlinked first, so they never overwrite the open file.
+  // New graphs are unlinked first, so they never overwrite the open file.
   const newGraph = useCallback(() => {
     if (graphRef.current.nodes.length && !confirm('Start a new, empty graph? (You can undo this.)')) return;
     closeFile();
     setGraph(emptyGraph());
     setSelection(null);
-  }, [closeFile, setGraph]);
-
-  const loadExample = useCallback(() => {
-    closeFile();
-    setGraph(parseGraphText(sampleYaml));
-    setSelection(null);
-    setTimeout(() => canvas.current?.fit(), 50);
   }, [closeFile, setGraph]);
 
   const onNodesMoved = useCallback(
@@ -779,9 +774,6 @@ export function App() {
               </button>
               <button className="btn" onClick={() => void openAction()}>
                 Open a file
-              </button>
-              <button className="btn ghost" onClick={loadExample}>
-                Load example
               </button>
             </div>
           </div>

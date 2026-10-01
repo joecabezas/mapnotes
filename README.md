@@ -15,7 +15,7 @@ npm run build                        # static site in dist/
 
 The web app is a static site with no backend. How it saves depends on the browser:
 
-- **Chrome, Edge and other Chromium browsers** can edit files on disk directly (File System Access API). **Open** a YAML/JSON file, or **Save** to create one, and every change is written back to that file. The file is also checked every second, so edits made by the MCP server or a text editor show up live. After a page reload the browser remembers the file but asks for permission again: click **Reconnect** in the status pill. **Close file** in the ▾ menu unlinks it; **New** and **Load example** also unlink it so they never overwrite your file.
+- **Chrome, Edge and other Chromium browsers** can edit files on disk directly (File System Access API). **Open** a YAML/JSON file, or **Save** to create one, and every change is written back to that file. The file is also checked every second, so edits made by the MCP server or a text editor show up live. After a page reload the browser remembers the file but asks for permission again: click **Reconnect** in the status pill. **Close file** in the ▾ menu unlinks it; **New** also unlinks it so they never overwrite your file.
 - **Firefox and Safari** don't support that API, so work is kept in the browser (`localStorage`). **Open** loads a file's contents, and **Download** saves a copy.
 
 In every browser the current graph is also kept in `localStorage`, and the ▾ menu can download YAML/JSON or export a PNG.
@@ -153,7 +153,7 @@ edges:
     properties: []
 ```
 
-For hand-written files, `properties` may also be a plain mapping (`properties: { author: sam }`), and edge ids may be left out (they're generated). JSON with the same structure is accepted too. See `examples/pr-tracking.yaml`.
+For hand-written files, `properties` may also be a plain mapping (`properties: { author: sam }`), and edge ids may be left out (they're generated). JSON with the same structure is accepted too. See `examples/layering-100.yaml`.
 
 ## Project layout
 
