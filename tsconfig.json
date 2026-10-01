@@ -13,5 +13,5 @@
     "allowImportingTsExtensions": true,
     "types": ["node"]
   },
-  "include": ["shared", "mcp", "web", "vite.config.ts"]
+  "include": ["shared", "mcp", "web", "test", "vite.config.ts", "vitest.config.ts"]
 }
