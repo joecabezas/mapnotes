@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readHandle, writeHandle } from '../web/fileAccess.ts';
+import { writeFileText } from '../web/fileSync.ts';
 
 /** In-memory stand-in for a File System Access API file handle. */
 function fakeHandle(opts: { failWrites?: number } = {}) {
@@ -53,8 +54,27 @@ describe('writeHandle / readHandle', () => {
 // the save/poll logic can be driven from a test.
 describe('browser save/poll races (web/App.tsx)', () => {
   // TODO.md: "Keep failed browser saves pending."
-  it.todo('a failed autosave keeps the graph pending and retrying without edits writes it');
-  it.todo('a failed manual save leaves the status in error until a retry succeeds');
+  // More cases in save-retry.test.ts.
+  it('a failed autosave keeps the graph pending and retrying without edits writes it', async () => {
+    const { handle, state } = fakeHandle({ failWrites: 1 });
+    state.text = 'old';
+    const refs = { fileText: { current: 'old' as string | null }, fileModified: { current: 1 }, writingText: { current: null } };
+    await expect(writeFileText(handle, 'new', refs)).rejects.toThrow('disk full');
+    expect(refs.fileText.current).toBe('old');
+    await writeFileText(handle, 'new', refs);
+    expect(state.text).toBe('new');
+    expect(refs.fileText.current).toBe('new');
+  });
+  it('a failed manual save leaves the status in error until a retry succeeds', async () => {
+    const { handle, state } = fakeHandle({ failWrites: 2 });
+    const refs = { fileText: { current: '' as string | null }, fileModified: { current: 1 }, writingText: { current: null } };
+    // App shows "Save failed" while writeFileText rejects, and "Saved" once it resolves.
+    await expect(writeFileText(handle, 'new', refs)).rejects.toThrow('disk full');
+    await expect(writeFileText(handle, 'new', refs)).rejects.toThrow('disk full');
+    expect(refs.fileText.current).toBe('');
+    await expect(writeFileText(handle, 'new', refs)).resolves.toBeUndefined();
+    expect(state.text).toBe('new');
+  });
 
   // TODO.md: "Detect external changes before replacing a linked file."
   it.todo('an external edit between a browser edit and its autosave is not overwritten');

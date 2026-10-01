@@ -14,8 +14,8 @@ import {
   readHandle,
   recallHandle,
   rememberHandle,
-  writeHandle,
 } from './fileAccess';
+import { writeFileText as writeTracked } from './fileSync';
 import type { ThemeName } from './theme';
 
 const LOCAL_KEY = 'mapnotes:graph';
@@ -136,15 +136,10 @@ export function App() {
   }, []);
 
   /** Writes `text` to the file; only a successful write counts as what's on disk. */
-  const writeFileText = useCallback(async (handle: FileSystemFileHandle, text: string) => {
-    writingText.current = text;
-    try {
-      fileModified.current = await writeHandle(handle, text);
-      fileText.current = text;
-    } finally {
-      writingText.current = null;
-    }
-  }, []);
+  const writeFileText = useCallback(
+    (handle: FileSystemFileHandle, text: string) => writeTracked(handle, text, { fileText, fileModified, writingText }),
+    [],
+  );
 
   /** Replaces the graph. `record` adds an undo step; `fromRemote` skips writing it back. */
   const setGraph = useCallback((next: Graph, opts: { record?: boolean; fromRemote?: boolean } = {}) => {
