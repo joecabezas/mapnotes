@@ -27,6 +27,7 @@ import {
   removeStyle,
   upsertStyle,
 } from '../shared/model.ts';
+import { DEFAULT_FIND_LIMIT, MAX_FIND_LIMIT, findNodes } from '../shared/search.ts';
 import { formatForPath, serializeGraph } from '../shared/yaml.ts';
 
 let currentFile: string | undefined;
@@ -137,6 +138,34 @@ server.registerTool(
     const edges = graph.edges.filter((e) => e.source === id || e.target === id);
     return ok(JSON.stringify({ node, edges }, null, 2));
   }),
+);
+
+server.registerTool(
+  'find_nodes',
+  {
+    title: 'Find nodes',
+    description:
+      'Search or list nodes without fetching the whole graph. Returns ids with brief summaries (label, style, property and edge counts, matched fields), sorted by id; call get_node for details. All filters are optional and combine with AND; with none, lists every node. If nextCursor is returned, pass it as cursor to get the next page.',
+    inputSchema: {
+      query: z.string().optional().describe('Case-insensitive text matched against id, label, property keys and values'),
+      propertyKey: z.string().optional().describe('Only nodes with this property key (case-insensitive, exact)'),
+      propertyValue: z
+        .string()
+        .optional()
+        .describe('Only nodes with a property value containing this text (of propertyKey, if given)'),
+      style: z.string().optional().describe('Only nodes with this style id; "" for nodes without a style'),
+      limit: z
+        .number()
+        .int()
+        .min(1)
+        .max(MAX_FIND_LIMIT)
+        .optional()
+        .describe(`Page size, default ${DEFAULT_FIND_LIMIT}, max ${MAX_FIND_LIMIT}`),
+      cursor: z.string().optional().describe('nextCursor from the previous page'),
+    },
+    annotations: { readOnlyHint: true },
+  },
+  safe(async (args) => ok(JSON.stringify(findNodes(await current(), args), null, 2))),
 );
 
 server.registerTool(

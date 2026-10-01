@@ -103,6 +103,7 @@ This repo also includes `.mcp.json`, so Claude Code opened in this folder offers
 | `load_graph` | Open a YAML/JSON file; it becomes the current file |
 | `save_graph` | Save to the current file, or "save as" to a new path (`.json` → JSON) |
 | `get_graph`, `get_node` | Read the graph, or one node with its edges |
+| `find_nodes` | Search nodes by id, label, property or style; paged id/label summaries for large graphs |
 | `add_node`, `edit_node`, `remove_node` | Node CRUD (rename via `newId` updates edges; removing a node removes its edges) |
 | `add_edge`, `edit_edge`, `remove_edge` | Edge CRUD (label, endpoints, style, properties) |
 | `edit_graph_properties` | Set/remove/replace graph-level key/value properties |
