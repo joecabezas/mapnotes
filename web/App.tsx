@@ -36,8 +36,9 @@ const FILE_SAVE_DELAY_MS = 300;
 /**
  * The file on disk the graph is linked to. `reconnect`: the browser remembered
  * the file from a previous visit but needs a click to grant access again.
+ * `paused`: the file has invalid entries, so it is not overwritten until the user decides.
  */
-type FileStatus = 'saved' | 'saving' | 'error' | 'reconnect';
+type FileStatus = 'saved' | 'saving' | 'error' | 'reconnect' | 'paused';
 interface OpenFile {
   handle: FileSystemFileHandle;
   status: FileStatus;
@@ -47,6 +48,11 @@ interface Toast {
   id: number;
   text: string;
   kind: 'info' | 'error';
+}
+/** Invalid entries dropped while reading a graph file. */
+interface Issues {
+  source: string;
+  list: string[];
 }
 interface History {
   graph: Graph;
@@ -115,6 +121,7 @@ export function App() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [issues, setIssues] = useState<Issues | null>(null);
   const [layoutName, setLayoutName] = useState<LayoutName>('elk');
   const [panelWidth, setPanelWidth] = useState(() => Number(storageGet(PANEL_WIDTH_KEY)) || PANEL_WIDTH_DEFAULT);
   const panelMax = Math.max(PANEL_WIDTH_MIN, window.innerWidth - CANVAS_MIN_WIDTH);
@@ -182,12 +189,14 @@ export function App() {
     async (handle: FileSystemFileHandle, fresh: boolean): Promise<boolean> => {
       try {
         const { text, lastModified } = await readHandle(handle);
-        const next = parseGraphText(text);
+        const list: string[] = [];
+        const next = parseGraphText(text, list);
         fileText.current = text;
         fileModified.current = lastModified;
         if (fresh) resetGraph(next);
         else setGraph(next, { fromRemote: true });
-        setFile({ handle, status: 'saved' });
+        setFile({ handle, status: list.length ? 'paused' : 'saved' });
+        setIssues(list.length ? { source: handle.name, list } : null);
         return true;
       } catch (err) {
         toast(`Could not read ${handle.name}: ${(err as Error).message}`, 'error');
@@ -227,7 +236,8 @@ export function App() {
       skipSave.current = false;
       return;
     }
-    const handle = fileRef.current?.status === 'reconnect' ? null : fileRef.current?.handle;
+    const status = fileRef.current?.status;
+    const handle = status === 'reconnect' || status === 'paused' ? null : fileRef.current?.handle;
     if (!handle) return;
     const text = textFor(graph, handle.name);
     if (text === fileText.current) {
@@ -263,10 +273,12 @@ export function App() {
         fileModified.current = current.lastModified;
         const text = await current.text();
         if (text === fileText.current) return;
-        const next = parseGraphText(text);
+        const list: string[] = [];
+        const next = parseGraphText(text, list);
         fileText.current = text;
         setGraph(next, { fromRemote: true });
-        setFile((f) => (f?.handle === watchedHandle ? { ...f, status: 'saved' } : f));
+        setFile((f) => (f?.handle === watchedHandle ? { ...f, status: list.length ? 'paused' : 'saved' } : f));
+        setIssues(list.length ? { source: watchedHandle.name, list } : null);
       } catch (err) {
         // A half-written or invalid file is skipped until the next change; a missing one is reported once.
         if ((err as DOMException).name === 'NotFoundError' && fileRef.current?.status !== 'error') {
@@ -341,9 +353,11 @@ export function App() {
   const openFile = useCallback(
     async (file: File) => {
       try {
-        const next = parseGraphText(await file.text());
+        const list: string[] = [];
+        const next = parseGraphText(await file.text(), list);
         setGraph(next);
         setSelection(null);
+        setIssues(list.length ? { source: file.name, list } : null);
         toast(`Loaded ${file.name}: ${next.nodes.length} nodes, ${next.edges.length} edges`);
         setTimeout(() => canvas.current?.fit(), 50);
       } catch (err) {
@@ -356,6 +370,7 @@ export function App() {
   /** Stops writing to the linked file; the graph stays in the browser. */
   const closeFile = useCallback(() => {
     setFile(null);
+    setIssues(null);
     fileText.current = null;
     void rememberHandle(null);
   }, []);
@@ -386,6 +401,7 @@ export function App() {
       fileText.current = text;
       fileModified.current = await writeHandle(handle, text);
       setFile({ handle, status: 'saved' });
+      setIssues(null);
       void rememberHandle(handle);
       toast(`Saved to ${handle.name}: further changes are saved automatically`);
     } catch (err) {
@@ -439,6 +455,7 @@ export function App() {
     try {
       fileModified.current = await writeHandle(f.handle, text);
       setFile((cur) => (cur?.handle === f.handle ? { ...cur, status: 'saved' } : cur));
+      setIssues(null);
       toast(`Saved to ${f.handle.name}`);
     } catch (err) {
       setFile((cur) => (cur?.handle === f.handle ? { ...cur, status: 'error' } : cur));
@@ -704,7 +721,8 @@ export function App() {
             className={`sync ${file.status}`}
             data-tip={`Changes are saved to ${file.handle.name}; edits to it from other tools (e.g. the MCP server) show up here.`}
           >
-            <span className="dot" /> {{ saved: 'Saved', saving: 'Saving…', error: 'Save failed' }[file.status]} · {file.handle.name}
+            <span className="dot" />{' '}
+            {{ saved: 'Saved', saving: 'Saving…', error: 'Save failed', paused: 'Not saving' }[file.status]} · {file.handle.name}
           </div>
         ) : (
           <div
@@ -759,6 +777,38 @@ export function App() {
             <button className="btn small ghost" onClick={() => setConnect(null)}>
               Cancel (Esc)
             </button>
+          </div>
+        )}
+
+        {issues && (
+          <div className="issues" role="alert">
+            <div className="issues-head">
+              <b>
+                {issues.list.length} invalid entr{issues.list.length === 1 ? 'y' : 'ies'} skipped in {issues.source}
+              </b>
+              {file?.status === 'paused' && <span> — changes are not saved to it until you choose</span>}
+            </div>
+            <ul>
+              {issues.list.map((issue, i) => (
+                <li key={i}>{issue}</li>
+              ))}
+            </ul>
+            <div className="row">
+              {file?.status === 'paused' ? (
+                <>
+                  <button className="btn small" data-tip="Overwrite the file without the invalid entries" onClick={() => void save()}>
+                    Save without them
+                  </button>
+                  <button className="btn small ghost" data-tip="Stop saving to the file; fix it in an editor and open it again" onClick={closeFile}>
+                    Close file
+                  </button>
+                </>
+              ) : (
+                <button className="btn small ghost" onClick={() => setIssues(null)}>
+                  Dismiss
+                </button>
+              )}
+            </div>
           </div>
         )}
 

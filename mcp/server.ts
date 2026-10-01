@@ -31,12 +31,28 @@ import { formatForPath, serializeGraph } from '../shared/yaml.ts';
 
 let currentFile: string | undefined;
 let memoryGraph: Graph = emptyGraph();
+/** Entries of the current file that could not be read (and would be lost if it were rewritten). */
+let fileIssues: string[] = [];
 
 async function current(): Promise<Graph> {
-  return currentFile ? readGraphFile(currentFile) : memoryGraph;
+  if (!currentFile) return memoryGraph;
+  const issues: string[] = [];
+  const graph = await readGraphFile(currentFile, issues);
+  fileIssues = issues;
+  return graph;
 }
 
+function issueList(issues: string[]): string {
+  return issues.map((i) => `\n- ${i}`).join('');
+}
+
+// Automatic saves never drop entries silently: an explicit save_graph is needed to overwrite such a file.
 async function commit(graph: Graph): Promise<void> {
+  if (currentFile && fileIssues.length) {
+    throw new Error(
+      `Not saved: ${currentFile} has ${fileIssues.length} invalid entr${fileIssues.length === 1 ? 'y' : 'ies'} that would be lost:${issueList(fileIssues)}\nFix the file, or call save_graph to overwrite it without them.`,
+    );
+  }
   memoryGraph = graph;
   if (currentFile) await writeGraphFile(currentFile, graph);
 }
@@ -82,10 +98,15 @@ server.registerTool(
   },
   safe(async ({ path: p }) => {
     const file = path.resolve(p);
-    const graph = await readGraphFile(file);
+    const issues: string[] = [];
+    const graph = await readGraphFile(file, issues);
     currentFile = file;
     memoryGraph = graph;
-    return ok(`Loaded ${file}: ${summary(graph)}`);
+    fileIssues = issues;
+    if (!issues.length) return ok(`Loaded ${file}: ${summary(graph)}`);
+    return ok(
+      `Loaded ${file}: ${summary(graph)}\nWarning: ${issues.length} invalid entr${issues.length === 1 ? 'y was' : 'ies were'} skipped:${issueList(issues)}\nChanges will not be saved automatically until the file is fixed or save_graph is called to overwrite it without them.`,
+    );
   }),
 );
 
@@ -99,11 +120,14 @@ server.registerTool(
   },
   safe(async ({ path: p }) => {
     const graph = await current();
+    const dropped = currentFile ? fileIssues : [];
     const file = p ? path.resolve(p) : currentFile;
     if (!file) throw new Error('No current file; pass a path');
     await writeGraphFile(file, graph);
     currentFile = file;
-    return ok(`Saved ${summary(graph)} to ${file} (${formatForPath(file)})`);
+    fileIssues = [];
+    const note = dropped.length ? `\nDropped ${dropped.length} invalid entr${dropped.length === 1 ? 'y' : 'ies'}:${issueList(dropped)}` : '';
+    return ok(`Saved ${summary(graph)} to ${file} (${formatForPath(file)})${note}`);
   }),
 );
 
@@ -117,7 +141,8 @@ server.registerTool(
   },
   safe(async ({ format }) => {
     const graph = await current();
-    const header = currentFile ? `# ${currentFile}\n` : '# (unsaved graph)\n';
+    const warnings = currentFile ? fileIssues.map((i) => `# Warning: ${i}\n`).join('') : '';
+    const header = (currentFile ? `# ${currentFile}\n` : '# (unsaved graph)\n') + warnings;
     return ok(header + serializeGraph(graph, format ?? 'yaml'));
   }),
 );
@@ -333,7 +358,8 @@ server.registerTool(
 const initial = process.argv[2];
 if (initial) {
   currentFile = path.resolve(initial);
-  memoryGraph = await readGraphFile(currentFile);
+  memoryGraph = await readGraphFile(currentFile, fileIssues);
+  for (const issue of fileIssues) console.error(`Warning: ${currentFile}: ${issue}`);
 }
 
 await server.connect(new StdioServerTransport());

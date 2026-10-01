@@ -1,14 +1,15 @@
 import { dump, load } from 'js-yaml';
 import { type Graph, GraphError, normalizeGraph } from './model.ts';
 
-export function parseGraphYaml(text: string): Graph {
+/** Entries that had to be dropped are described in `issues` (see `normalizeGraph`). */
+export function parseGraphYaml(text: string, issues?: string[]): Graph {
   let data: unknown;
   try {
     data = load(text);
   } catch (err) {
     throw new GraphError(`Invalid YAML: ${(err as Error).message}`);
   }
-  return normalizeGraph(data);
+  return normalizeGraph(data, issues);
 }
 
 // Round positions so dragging does not produce noisy diffs.
@@ -32,8 +33,8 @@ export function formatForPath(file: string): GraphFormat {
 }
 
 /** Parses YAML or JSON (JSON is valid YAML, so YAML parsing handles both). */
-export function parseGraphText(text: string): Graph {
-  return parseGraphYaml(text);
+export function parseGraphText(text: string, issues?: string[]): Graph {
+  return parseGraphYaml(text, issues);
 }
 
 export function serializeGraph(graph: Graph, format: GraphFormat): string {
