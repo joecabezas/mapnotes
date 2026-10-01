@@ -10,6 +10,7 @@ import {
   removeNode,
   type Style,
 } from '../../shared/model';
+import { type ArrangeOp, SPACE_GAP } from '../arrange';
 import type { Selection } from './GraphCanvas';
 import { PropertyEditor } from './PropertyEditor';
 
@@ -22,7 +23,43 @@ interface Props {
   onConnectFrom(nodeId: string): void;
   /** Opens the styles dialog, optionally with `styleId` selected. */
   onOpenStyles(styleId?: string): void;
+  /** Aligns or distributes the given nodes on the canvas. */
+  onArrange(ids: string[], op: ArrangeOp): void;
 }
+
+/** Icons are 24×24 strokes: a guide line plus the boxes being moved onto / spaced along it. */
+const ARRANGE_BUTTONS: { op: ArrangeOp; tip: string; icon: string }[] = [
+  { op: 'left', tip: 'Align left edges', icon: 'M4 3v18M8 6h12v4H8zM8 14h7v4H8z' },
+  { op: 'center', tip: 'Align horizontal centres (stack in a column)', icon: 'M12 3v18M5 6h14v4H5zM8 14h8v4H8z' },
+  { op: 'right', tip: 'Align right edges', icon: 'M20 3v18M4 6h12v4H4zM9 14h7v4H9z' },
+  { op: 'top', tip: 'Align top edges', icon: 'M3 4h18M6 8h4v12H6zM14 8h4v7h-4z' },
+  { op: 'middle', tip: 'Align vertical centres (line up in a row)', icon: 'M3 12h18M6 5h4v14H6zM14 8h4v8h-4z' },
+  { op: 'bottom', tip: 'Align bottom edges', icon: 'M3 20h18M6 4h4v12H6zM14 9h4v7h-4z' },
+];
+const DISTRIBUTE_BUTTONS: { op: ArrangeOp; tip: string; icon: string }[] = [
+  {
+    op: 'distribute-x',
+    tip: 'Distribute horizontally: equal gaps between nodes, keeping the leftmost and rightmost in place',
+    icon: 'M3 3v18M21 3v18M9 7h6v10H9z',
+  },
+  {
+    op: 'distribute-y',
+    tip: 'Distribute vertically: equal gaps between nodes, keeping the top and bottom ones in place',
+    icon: 'M3 3h18M3 21h18M7 9h10v6H7z',
+  },
+];
+const SPACE_BUTTONS: { op: ArrangeOp; tip: string; icon: string }[] = [
+  {
+    op: 'space-x',
+    tip: `Space out horizontally: a fixed ${SPACE_GAP}px gap between nodes, starting from the leftmost (separates overlapping nodes)`,
+    icon: 'M2 8h5v8H2zM17 8h5v8h-5zM9 12h6M13 10l2 2-2 2M11 10l-2 2 2 2',
+  },
+  {
+    op: 'space-y',
+    tip: `Space out vertically: a fixed ${SPACE_GAP}px gap between nodes, starting from the topmost (separates overlapping nodes)`,
+    icon: 'M8 2h8v5H8zM8 17h8v5H8zM12 9v6M10 13l2 2 2-2M10 11l2-2 2 2',
+  },
+];
 
 /** Copies `text` to the clipboard, showing a check mark for a moment. */
 function CopyButton({ text, what }: { text: string; what: string }) {
@@ -365,6 +402,16 @@ function GraphPanel(p: Props) {
   );
 }
 
+function ArrangeButton(b: { tip: string; icon: string; disabled?: boolean; onClick(): void }) {
+  return (
+    <button type="button" className="btn ghost icon" data-tip={b.tip} aria-label={b.tip} disabled={b.disabled} onClick={b.onClick}>
+      <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d={b.icon} />
+      </svg>
+    </button>
+  );
+}
+
 function MultiNodePanel({ ids, ...p }: Props & { ids: string[] }) {
   const nodes = p.graph.nodes.filter((n) => ids.includes(n.id));
   const styles = new Set(nodes.map((n) => n.style ?? ''));
@@ -387,6 +434,28 @@ function MultiNodePanel({ ids, ...p }: Props & { ids: string[] }) {
           onChange={setStyle}
           onManage={p.onOpenStyles}
         />
+      </section>
+      <section>
+        <h3>Arrange</h3>
+        <div className="arrange-row" role="group" aria-label="Align and distribute">
+          {ARRANGE_BUTTONS.map((b) => (
+            <ArrangeButton key={b.op} {...b} onClick={() => p.onArrange(ids, b.op)} />
+          ))}
+          <span className="arrange-sep" aria-hidden="true" />
+          {DISTRIBUTE_BUTTONS.map((b) => (
+            <ArrangeButton
+              key={b.op}
+              {...b}
+              tip={nodes.length < 3 ? 'Select 3 or more nodes to distribute them' : b.tip}
+              disabled={nodes.length < 3}
+              onClick={() => p.onArrange(ids, b.op)}
+            />
+          ))}
+          <span className="arrange-sep" aria-hidden="true" />
+          {SPACE_BUTTONS.map((b) => (
+            <ArrangeButton key={b.op} {...b} onClick={() => p.onArrange(ids, b.op)} />
+          ))}
+        </div>
       </section>
       <section>
         <h3>

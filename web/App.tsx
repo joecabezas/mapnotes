@@ -1104,6 +1104,7 @@ export function App() {
               if (sel) canvas.current?.center(sel);
             }}
             onConnectFrom={(id) => startConnect(id)}
+            onArrange={(ids, op) => canvas.current?.arrange(ids, op)}
             onOpenStyles={(styleId) => {
               setStylesInitialId(styleId);
               setStylesOpen(true);

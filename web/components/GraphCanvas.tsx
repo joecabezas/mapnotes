@@ -2,6 +2,7 @@ import cytoscape, { type Core, type EventObject, type NodeSingular } from 'cytos
 import fcose from 'cytoscape-fcose';
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import type { Graph, Position } from '../../shared/model';
+import { arrange, type ArrangeOp } from '../arrange';
 import { useIcons } from '../icons';
 import { buildStylesheet, CANVAS_COLORS, type ThemeName } from '../theme';
 
@@ -37,6 +38,8 @@ export interface GraphCanvasHandle {
   runLayout(name: LayoutName): void;
   center(sel: Selection): void;
   exportPng(): string;
+  /** Aligns or distributes the given nodes, saving their new positions as one undo step. */
+  arrange(ids: string[], op: ArrangeOp): void;
 }
 
 interface Props {
@@ -207,6 +210,22 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
       const cy = cyRef.current!;
       const bg = getComputedStyle(document.documentElement).getPropertyValue('--canvas-bg').trim();
       return cy.png({ full: true, scale: 2, bg: bg || undefined });
+    },
+    arrange(ids, op) {
+      const cy = cyRef.current;
+      if (!cy) return;
+      // Align by the node shapes; distribute by what's visible, so labels count towards the gaps.
+      const withLabels = op.startsWith('distribute') || op.startsWith('space');
+      const items = ids
+        .map((id) => cy.getElementById(nid(id)))
+        .filter((n) => n.nonempty())
+        .map((n) => ({
+          id: n.data('refId') as string,
+          position: { ...n.position() },
+          box: n.boundingBox({ includeLabels: withLabels, includeOverlays: false }),
+        }));
+      const positions = arrange(items, op);
+      if (Object.keys(positions).length) latest.current.onNodesMoved(positions, true);
     },
   }));
 

@@ -860,6 +860,19 @@ button.sync.error {
 .inspector section > .btn {
   align-self: flex-start;
 }
+.arrange-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+}
+.arrange-sep {
+  width: 1px;
+  height: 20px;
+  margin: 0 4px;
+  background: var(--border);
+}
+
 .inspector h3,
 .modal h3 {
   margin: 0;
