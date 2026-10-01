@@ -1,4 +1,5 @@
 // Node-only helpers for reading/writing graph files on disk.
+import { randomBytes } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { emptyGraph, type Graph } from './model.ts';
@@ -15,12 +16,27 @@ export async function readGraphFile(file: string): Promise<Graph> {
   return parseGraphText(text);
 }
 
-/** Writes atomically (temp file + rename) so watchers never see half a file. */
+/**
+ * Writes atomically (temp file + rename) so watchers never see half a file.
+ * The temp file is created exclusively with a random name next to the target,
+ * and removed if writing or renaming fails.
+ */
 export async function writeGraphText(file: string, text: string): Promise<void> {
   await fs.mkdir(path.dirname(file), { recursive: true });
-  const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
-  await fs.writeFile(tmp, text, 'utf8');
-  await fs.rename(tmp, file);
+  const tmp = `${file}.${process.pid}.${randomBytes(8).toString('hex')}.tmp`;
+  // 'wx' fails instead of reusing a name, so we only ever clean up our own file.
+  const handle = await fs.open(tmp, 'wx');
+  try {
+    try {
+      await handle.writeFile(text, 'utf8');
+    } finally {
+      await handle.close();
+    }
+    await fs.rename(tmp, file);
+  } catch (err) {
+    await fs.rm(tmp, { force: true }).catch(() => {});
+    throw err;
+  }
 }
 
 export async function writeGraphFile(file: string, graph: Graph): Promise<string> {
