@@ -392,9 +392,19 @@ export function App() {
 
   // ---- Automatic layout: of the selected nodes when there are several, otherwise of the whole graph.
   const layoutScope = selectedNodeIds.length >= 2 ? selectedNodeIds : null;
+  /** Layout runs in flight (a newer run can start before an older one finishes). */
+  const [layoutsRunning, setLayoutsRunning] = useState(0);
   const runLayout = useCallback(
     async (name: LayoutName) => {
-      const result = await canvas.current?.runLayout(name, layoutScope ?? undefined);
+      setLayoutsRunning((n) => n + 1);
+      let result;
+      try {
+        result = await canvas.current?.runLayout(name, layoutScope ?? undefined);
+      } catch (err) {
+        toast(`Layout failed: ${(err as Error).message}`, 'error');
+      } finally {
+        setLayoutsRunning((n) => n - 1);
+      }
       if (!result) return;
       const { before, after } = result;
       const what = name === 'auto' ? `Picked ${layoutLabel(result.algorithm)}` : layoutLabel(name);
@@ -835,7 +845,8 @@ export function App() {
             {LAYOUTS.map((l) => <option key={l.name} value={l.name}>{l.label}</option>)}
           </select>
           <button
-            className={`btn ghost icon${layoutScope ? ' scoped' : ''}`}
+            className={`btn ghost icon${layoutScope ? ' scoped' : ''}${layoutsRunning ? ' busy' : ''}`}
+            disabled={layoutsRunning > 0}
             data-tip={layoutScope ? `Run the layout on the ${layoutScope.length} selected nodes (L)` : 'Run the layout on the whole graph (L)'}
             aria-label={layoutScope ? 'Run layout on selected nodes' : 'Run layout again'}
             onClick={() => void runLayout(layoutName)}

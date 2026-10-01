@@ -1,8 +1,9 @@
 import cytoscape, { type Core, type EventObject, type NodeSingular } from 'cytoscape';
-import fcose from 'cytoscape-fcose';
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import type { Graph, Position } from '../../shared/model';
 import { arrange, type ArrangeOp } from '../arrange';
+import { computeLayout, type LayoutName, type LayoutResult } from '../layout';
+import { isArced } from '../layoutQuality';
 import { useIcons } from '../icons';
 import { buildStylesheet, CANVAS_COLORS, type ThemeName } from '../theme';
 
@@ -13,29 +14,13 @@ const eid = (id: string) => `e:${id}`;
 /** One node or edge (shown in the inspector), or several nodes (moved / deleted / styled together). */
 export type Selection = { kind: 'node' | 'edge'; id: string } | { kind: 'nodes'; ids: string[] } | null;
 
-
-/** ELK is large (~1.5 MB), so it's only downloaded the first time the smart layout runs. */
-let elkReady: Promise<void> | null = null;
-function loadElk(): Promise<void> {
-  // @ts-expect-error cytoscape-elk ships no types; it's a standard Cytoscape extension.
-  elkReady ??= import('cytoscape-elk').then((m: { default: cytoscape.Ext }) => void cytoscape.use(m.default));
-  return elkReady;
-}
-cytoscape.use(fcose);
-
-export const LAYOUTS = [
-  { name: 'elk', label: 'Smart (layered)' },
-  { name: 'fcose', label: 'Force-directed' },
-  { name: 'breadthfirst', label: 'Hierarchy' },
-  { name: 'concentric', label: 'Concentric' },
-  { name: 'circle', label: 'Circle' },
-  { name: 'grid', label: 'Grid' },
-] as const;
-export type LayoutName = (typeof LAYOUTS)[number]['name'];
-
 export interface GraphCanvasHandle {
   fit(): void;
-  runLayout(name: LayoutName): void;
+  /**
+   * Lays out the given nodes (at least two; others stay put), or the whole graph, saving the new
+   * positions as one undo step. Resolves to null when nothing was laid out or a newer run took over.
+   */
+  runLayout(name: LayoutName, ids?: string[]): Promise<LayoutResult | null>;
   center(sel: Selection): void;
   exportPng(): string;
   /** Aligns or distributes the given nodes, saving their new positions as one undo step. */
@@ -65,90 +50,18 @@ interface Hover {
   props: { key: string; value: string }[];
 }
 
-function layoutOptions(name: LayoutName): cytoscape.LayoutOptions {
-  // Labels sit under the nodes and can be much wider than them, so every layout spaces nodes by node + label.
-  const common = { animate: true, animationDuration: 400, padding: 40, fit: true, nodeDimensionsIncludeLabels: true };
-  switch (name) {
-    case 'elk':
-      // ELK's layered (Sugiyama) layout: parents above children, node order chosen to minimise edge
-      // crossings, each parent centred over its children.
-      return {
-        name,
-        ...common,
-        elk: {
-          algorithm: 'layered',
-          'elk.direction': 'DOWN',
-          'elk.spacing.nodeNode': 45,
-          'elk.layered.spacing.nodeNodeBetweenLayers': 60,
-          'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
-          'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
-          'elk.layered.nodePlacement.bk.fixedAlignment': 'BALANCED',
-        },
-      } as cytoscape.LayoutOptions;
-    case 'fcose':
-      // Physics simulation: nodes repel each other, edges pull their ends together like springs.
-      return {
-        name,
-        ...common,
-        quality: 'proof',
-        randomize: true,
-        nodeRepulsion: () => 20000,
-        idealEdgeLength: () => 140,
-        nodeSeparation: 120,
-        packComponents: true,
-      } as cytoscape.LayoutOptions;
-    case 'breadthfirst':
-      return { name, ...common, directed: true, spacingFactor: 1.2 } as cytoscape.LayoutOptions;
-    default:
-      return { name, ...common } as cytoscape.LayoutOptions;
-  }
-}
-
-/**
- * Every node plus one incoming edge per node (its "main parent"), found walking
- * breadth-first from the roots. Laying out only these keeps each node next to
- * its parent and the tree edges crossing-free; other edges (cross-links) are
- * still drawn, they just don't pull nodes away from their parent.
- */
-function spanningForest(cy: Core): cytoscape.CollectionReturnValue {
-  const tree = cy.collection();
-  const seen = new Set<string>();
-  const visit = (start: NodeSingular) => {
-    seen.add(start.id());
-    const queue = [start];
-    while (queue.length) {
-      queue.shift()!.outgoers('edge').forEach((edge) => {
-        const target = edge.target();
-        if (seen.has(target.id())) return;
-        seen.add(target.id());
-        tree.merge(edge);
-        queue.push(target);
-      });
-    }
-  };
-  cy.nodes().filter((n) => n.indegree(false) === 0).forEach(visit);
-  // Nodes only reachable through cycles: start from any one not placed yet.
-  cy.nodes().forEach((n) => {
-    if (!seen.has(n.id())) visit(n);
-  });
-  return cy.nodes().union(tree);
-}
-
 /**
  * A straight edge between two nodes in the same row runs through every node in
- * between (e.g. cross-links after the smart layout). Such edges get an `arc`
+ * between (e.g. cross-links after a tree layout). Such edges get an `arc`
  * (see theme.ts) that bends them above the row; other edges stay straight.
  */
-const ARC_MAX_DY = 30;
-const ARC_MIN_DX = 100;
 function updateArcs(edges: cytoscape.EdgeCollection) {
   edges.forEach((edge) => {
     const s = edge.source().position();
     const t = edge.target().position();
     const dx = t.x - s.x;
-    const dy = t.y - s.y;
     let arc = 0;
-    if (Math.abs(dy) < ARC_MAX_DY && Math.abs(dx) > ARC_MIN_DX) {
+    if (isArced(s, t)) {
       const height = Math.min(140, 30 + Math.abs(dx) * 0.08);
       // Distances are measured to the left of the source→target direction: pick the side that is "up".
       arc = dx > 0 ? -height : height;
@@ -187,14 +100,31 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
     if (Object.keys(positions).length) latest.current.onNodesMoved(positions, record);
   }
 
-  async function runLayout(name: LayoutName) {
-    if (name === 'elk') await loadElk();
+  /** Bumped by every layout run, so a slow one finishing late doesn't undo a newer one. */
+  const layoutRun = useRef(0);
+
+  async function runLayout(name: LayoutName, ids?: string[]): Promise<LayoutResult | null> {
     const cy = cyRef.current;
-    if (!cy || cy.nodes().empty()) return;
-    const eles = name === 'elk' ? spanningForest(cy) : cy.elements();
-    const layout = eles.layout(layoutOptions(name));
-    layout.one('layoutstop', () => reportPositions(cy.nodes(), true));
+    if (!cy || cy.nodes().empty()) return null;
+    const wanted = new Set(ids);
+    const subset = wanted.size >= 2 ? cy.nodes().filter((n) => wanted.has(n.data('refId'))) : null;
+    const nodes = subset ?? cy.nodes();
+    const run = ++layoutRun.current;
+    const result = await computeLayout(cy, nodes, name);
+    if (run !== layoutRun.current || cy.destroyed()) return null;
+    const live = nodes.filter((n) => !n.removed() && result.positions[n.data('refId')] !== undefined);
+    const layout = live.layout({
+      name: 'preset',
+      positions: (n: NodeSingular) => result.positions[n.data('refId')],
+      animate: true,
+      animationDuration: 400,
+      // A partial layout stays where the nodes were, so the view stays put too.
+      fit: !subset,
+      padding: 40,
+    } as cytoscape.LayoutOptions);
+    layout.one('layoutstop', () => reportPositions(live, true));
     layout.run();
+    return result;
   }
 
   useImperativeHandle(ref, () => ({
@@ -367,7 +297,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
     if (unplaced.length) {
       if (unplaced.length === graph.nodes.length) {
         // Nothing has a position yet: lay out the whole graph.
-        runLayout('elk');
+        void runLayout('auto');
       } else {
         // Drop new nodes next to their placed neighbours, or in view.
         const center = (() => {

@@ -388,6 +388,14 @@ button.sync.error {
   border-color: var(--accent);
   color: var(--accent);
 }
+.btn.busy .toolbar-icon {
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 .btn.danger {
   color: var(--danger);
   border-color: color-mix(in srgb, var(--danger) 45%, transparent);
