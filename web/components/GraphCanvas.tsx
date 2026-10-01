@@ -67,7 +67,9 @@ function updateArcs(edges: cytoscape.EdgeCollection) {
       arc = dx > 0 ? -height : height;
     }
     if (arc) edge.data('arc', arc);
-    else if (edge.data('arc') !== undefined) edge.removeData('arc');
+    // Not removeData(): it doesn't restyle the edge, which would stay bent until something else
+    // (e.g. dropping the node) restyled it.
+    else if (edge.data('arc') !== undefined) edge.data({ arc: undefined });
   });
 }
 
