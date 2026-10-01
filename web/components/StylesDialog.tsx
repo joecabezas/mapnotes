@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ARROW_SHAPES,
   CURVE_STYLES,
@@ -38,18 +38,38 @@ interface Props {
 }
 
 function ColorInput(props: { label: string; value?: string; defaultValue: string; tip: string; onChange(v: string | undefined): void }) {
+  // While the picker is being dragged, only a local draft changes; the style is
+  // patched once the browser fires the native `change` event (picker committed).
+  // React's onChange maps to `input`, which fires on every drag step.
+  const [draft, setDraft] = useState<string | null>(null);
+  const pickerRef = useRef<HTMLInputElement>(null);
+  const onChangeRef = useRef(props.onChange);
+  onChangeRef.current = props.onChange;
+
+  useEffect(() => {
+    const el = pickerRef.current;
+    if (!el) return;
+    const commit = () => {
+      onChangeRef.current(el.value);
+      setDraft(null);
+    };
+    el.addEventListener('change', commit);
+    return () => el.removeEventListener('change', commit);
+  }, []);
+
   return (
     <label className="field" data-tip={props.tip}>
       <span>{props.label}</span>
       <div className="row">
         <input
+          ref={pickerRef}
           type="color"
-          value={props.value && /^#[0-9a-f]{6}$/i.test(props.value) ? props.value : props.defaultValue}
-          onChange={(e) => props.onChange(e.target.value)}
+          value={draft ?? (props.value && /^#[0-9a-f]{6}$/i.test(props.value) ? props.value : props.defaultValue)}
+          onChange={(e) => setDraft(e.target.value)}
         />
         <input
           className="mono"
-          value={props.value ?? ''}
+          value={draft ?? props.value ?? ''}
           placeholder={`${props.defaultValue} (default)`}
           onChange={(e) => props.onChange(e.target.value || undefined)}
         />
