@@ -19,6 +19,7 @@ import {
   DEFAULT_ARROW,
   DEFAULT_CURVE,
   DEFAULT_EDGE_WIDTH,
+  DEFAULT_BORDER_WIDTH,
   DEFAULT_ICON_SIZE,
   DEFAULT_LINE_STYLE,
   DEFAULT_NODE_SHAPE,
@@ -133,6 +134,7 @@ function Preview({ style, defaultFill }: { style: Style; defaultFill: string }) 
             height: size,
             background: style.color ?? 'var(--node-default)',
             borderColor: style.borderColor ?? 'var(--node-border-default)',
+            borderWidth: style.borderWidth ?? DEFAULT_BORDER_WIDTH,
             borderRadius: radius[style.shape ?? DEFAULT_NODE_SHAPE] ?? '4px',
             clipPath: clip[style.shape ?? ''],
           }}
@@ -261,6 +263,15 @@ export function StylesDialog({ graph, theme, apply, onClose }: Props) {
                         defaultValue={colors.nodeBorder}
                         tip="Outline of the node"
                         onChange={(borderColor) => patch({ borderColor })}
+                      />
+                      <NumberInput
+                        label="Border (px)"
+                        value={selected.borderWidth}
+                        defaultValue={DEFAULT_BORDER_WIDTH}
+                        min={0}
+                        max={20}
+                        tip="Outline width; 0 hides it"
+                        onChange={(borderWidth) => patch({ borderWidth })}
                       />
                       <Select label="Shape" value={selected.shape} options={NODE_SHAPES} defaultValue={DEFAULT_NODE_SHAPE} tip="Node shape" onChange={(shape) => patch({ shape })} />
                       <NumberInput label="Size (px)" value={selected.size} defaultValue={DEFAULT_NODE_SIZE} min={8} max={300} tip="Node diameter" onChange={(size) => patch({ size })} />

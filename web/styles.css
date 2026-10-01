@@ -267,6 +267,15 @@ code,
 .sync.local .dot {
   background: var(--muted);
 }
+.sync-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.btn.sync-delete:hover:not(:disabled) {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+}
 .sync.reconnect,
 button.sync.error {
   border: 1px solid var(--warn);
@@ -844,6 +853,14 @@ button.sync.error {
 }
 .help h3 {
   margin-top: 16px;
+}
+.help-command {
+  overflow-x: auto;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  white-space: pre;
+  user-select: text;
 }
 .steps {
   padding-left: 20px;

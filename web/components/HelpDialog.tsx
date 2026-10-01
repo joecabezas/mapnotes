@@ -76,6 +76,29 @@ export function HelpDialog({ onClose, fileName }: { onClose(): void; fileName: s
               <em>Save</em> to create one; from then on every change is written to it.
             </p>
           )}
+          <h3>Use with an AI assistant</h3>
+          <p>
+            The MCP server runs on your computer, not on this website. Install Node.js (20.6 or newer) and Git. You do
+            not need to clone this repository or choose a graph file during setup.
+          </p>
+          <p>For Claude Code, run this in a terminal:</p>
+          <pre className="help-command"><code>claude mcp add --scope user mapnotes -- npm exec --yes --package=github:joecabezas/mapnotes -- mapnotes-mcp</code></pre>
+          <p>
+            For another stdio MCP client, set the command to <code>npm</code> and its arguments to{' '}
+            <code>exec --yes --package=github:joecabezas/mapnotes -- mapnotes-mcp</code>. Restart the client and ask it
+            to call <code>get_graph</code>.
+          </p>
+          <p>
+            To see the agent's edits here, have it call <code>save_graph</code> with an absolute file path, then open
+            that file in Chrome or Edge. If you already saved a file here, have the agent call <code>load_graph</code>{' '}
+            with its path. The website and MCP server do not connect to each other; each reads the same file separately.
+            Save before restarting the agent; a graph kept only in MCP memory will be lost.
+          </p>
+          <p>
+            <a href="https://github.com/joecabezas/mapnotes#install-without-cloning" target="_blank" rel="noreferrer">
+              Full MCP setup instructions
+            </a>
+          </p>
         </div>
       </div>
     </div>

@@ -39,6 +39,7 @@ export const CANVAS_COLORS: Record<ThemeName, CanvasColors> = {
 };
 
 export const DEFAULT_NODE_SIZE = 36;
+export const DEFAULT_BORDER_WIDTH = 2;
 export const DEFAULT_EDGE_WIDTH = 2;
 export const DEFAULT_NODE_SHAPE: NodeShape = 'ellipse';
 export const DEFAULT_LINE_STYLE: LineStyle = 'solid';
@@ -62,6 +63,7 @@ function styleRules(s: Style, icons: Record<string, string>, defaultFill: string
   if (s.target === 'node') {
     if (s.color) css['background-color'] = s.color;
     if (s.borderColor) css['border-color'] = s.borderColor;
+    if (s.borderWidth !== undefined) css['border-width'] = s.borderWidth;
     if (s.textColor) css.color = s.textColor;
     if (s.shape) css.shape = s.shape;
     if (s.size) {
@@ -106,7 +108,7 @@ export function buildStylesheet(styles: Style[], theme: ThemeName, icons: Record
         label: 'data(label)',
         'background-color': c.node,
         'border-color': c.nodeBorder,
-        'border-width': 2,
+        'border-width': DEFAULT_BORDER_WIDTH,
         color: c.nodeText,
         shape: DEFAULT_NODE_SHAPE,
         width: DEFAULT_NODE_SIZE,

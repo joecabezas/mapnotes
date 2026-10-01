@@ -64,6 +64,8 @@ export interface NodeStyle {
   name?: string;
   color?: string;
   borderColor?: string;
+  /** Outline width in px (default 2); 0 hides the outline. */
+  borderWidth?: number;
   textColor?: string;
   shape?: NodeShape;
   size?: number;
@@ -93,12 +95,13 @@ export interface EdgeStyle {
 export type Style = NodeStyle | EdgeStyle;
 
 /** Style fields that only apply to one target. */
-export const NODE_ONLY_STYLE_FIELDS = ['borderColor', 'shape', 'size', 'icon', 'iconColor', 'iconSize'] as const;
+export const NODE_ONLY_STYLE_FIELDS = ['borderColor', 'borderWidth', 'shape', 'size', 'icon', 'iconColor', 'iconSize'] as const;
 export const EDGE_ONLY_STYLE_FIELDS = ['width', 'lineStyle', 'arrow', 'curve'] as const;
 
 /** Accepted ranges for numeric style values. */
 export const STYLE_LIMITS = {
   size: { min: 8, max: 300 },
+  borderWidth: { min: 0, max: 20 },
   iconSize: { min: 10, max: 100 },
   width: { min: 1, max: 20 },
 } as const;
@@ -189,6 +192,7 @@ export function normalizeStyle(v: unknown): Style | undefined {
     name: str(v.name),
     color: str(v.color),
     borderColor: str(v.borderColor),
+    borderWidth: num(v.borderWidth),
     textColor: str(v.textColor),
     shape: oneOf(v.shape, NODE_SHAPES),
     size: num(v.size),

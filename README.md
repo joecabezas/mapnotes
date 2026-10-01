@@ -56,47 +56,53 @@ The MCP `set_style` tool accepts the same `icon`, `iconColor` and `iconSize` fie
 
 ## MCP server
 
-The MCP server lets an AI agent read and edit a graph file. It runs locally over stdio, from a clone of this repo:
+The MCP server lets an AI agent read and edit a graph file. The GitHub Pages site is static, so the server runs locally on your computer over stdio. There is no connection between the website and the MCP server: Chrome or Edge reads and writes a file you choose with its file picker, while the MCP server reads and writes a file by its path. If both use the same file, the browser notices changes made by the agent when it checks the file.
+
+### Install without cloning
+
+Install [Node.js](https://nodejs.org/) 20.6 or newer and Git, then register the server in your MCP client. You do not need a graph file yet. npm downloads the repository and dependencies into its cache on first use; you do not need a local clone or an npm account.
+
+For Claude Code:
 
 ```bash
-git clone https://github.com/joecabezas/mapnotes && cd mapnotes && npm install
-npx tsx mcp/server.ts graph.yaml     # stdio transport; starts empty if the file does not exist yet
+claude mcp add --scope user mapnotes -- npm exec --yes --package=github:joecabezas/mapnotes -- mapnotes-mcp
 ```
 
-### Install it with your agent
-
-Paste this into Claude Code, Codex, Cursor or any agent that can run commands:
-
-```text
-Install the MapNotes MCP server for me:
-1. Clone https://github.com/joecabezas/mapnotes into ~/mapnotes (skip if it's already there) and run `npm install` in it.
-2. Ask me which graph file it should edit. Default: ~/mapnotes/graph.yaml. Use absolute paths from here on.
-3. Register a stdio MCP server named "mapnotes" that runs: npx tsx <repo>/mcp/server.ts <graph file>
-   - Claude Code: claude mcp add --scope user mapnotes -- npx tsx <repo>/mcp/server.ts <graph file>
-   - Other clients: add it under "mcpServers" in the client's MCP config file.
-4. Tell me how to reload MCP servers in this client, then check it works by calling the mapnotes get_graph tool.
-To see the graph, I open https://joecabezas.github.io/mapnotes/ in Chrome or Edge and use Open to pick the same file.
-```
-
-### Install it yourself
-
-In Claude Code:
-
-```bash
-claude mcp add --scope user mapnotes -- npx tsx /absolute/path/to/mapnotes/mcp/server.ts /absolute/path/to/graph.yaml
-```
-
-This repo also includes `.mcp.json`, so Claude Code opened in this folder offers the `mapnotes` server automatically (pointing at `graph.yaml`). For other clients:
+For another stdio MCP client, use this configuration (adjust it to your client's configuration format):
 
 ```json
 {
   "mcpServers": {
     "mapnotes": {
-      "command": "npx",
-      "args": ["tsx", "/absolute/path/to/mapnotes/mcp/server.ts", "/absolute/path/to/graph.yaml"]
+      "command": "npm",
+      "args": ["exec", "--yes", "--package=github:joecabezas/mapnotes", "--", "mapnotes-mcp"]
     }
   }
 }
+```
+
+Restart or reload your MCP client and call `get_graph` to check the connection. Without a file, the server starts with an empty graph in memory. To see edits on the [web app](https://joecabezas.github.io/mapnotes/), ask the agent to call `save_graph` with an absolute `.yaml` or `.json` path, then use **Open** in Chrome or Edge to choose that file. Or save a graph in the web app first and ask the agent to call `load_graph` with its path. The website's file picker does not pass the file path to the MCP server; you must give the agent that path separately. Once both use the same file, the browser checks it for changes and the MCP server re-reads it before operations. Save before restarting the MCP client: unsaved in-memory changes are lost when it stops. You can also pass the file path after `mapnotes-mcp` in the command above to open it at startup. npm uses the repository's default branch, so restarting the client after a new release can fetch an updated version.
+
+### Ask your agent to install it
+
+Paste this into Claude Code, Codex, Cursor or any agent that can run commands:
+
+```text
+Install the MapNotes MCP server for me:
+1. Register a stdio MCP server named "mapnotes" with command "npm" and arguments:
+   exec --yes --package=github:joecabezas/mapnotes -- mapnotes-mcp
+   In Claude Code: claude mcp add --scope user mapnotes -- npm exec --yes --package=github:joecabezas/mapnotes -- mapnotes-mcp
+2. Tell me how to reload MCP servers in this client, then call mapnotes get_graph to check it works.
+3. When I want to see edits in https://joecabezas.github.io/mapnotes/, ask me where to save the graph, call save_graph with that absolute path, and tell me to open the same file in Chrome or Edge. If I already have a graph file, call load_graph with its path instead.
+```
+
+### Run from a local clone
+
+If you are developing MapNotes, you can also run the server from this repository:
+
+```bash
+git clone https://github.com/joecabezas/mapnotes && cd mapnotes && npm install
+npx tsx mcp/server.ts                  # optionally add an absolute graph file path
 ```
 
 | Tool | Purpose |
@@ -125,6 +131,7 @@ styles:                # reusable looks, referenced by id
     target: node       # node | edge
     color: "#7aa2f7"
     borderColor: "#c9d8ff"
+    borderWidth: 2     # optional, outline width in px, 0-20 (default 2)
     textColor: "#ffffff"
     shape: ellipse     # ellipse, rectangle, round-rectangle, triangle, diamond, pentagon, hexagon, octagon, star, tag, barrel
     size: 34

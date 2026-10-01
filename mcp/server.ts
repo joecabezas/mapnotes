@@ -1,6 +1,6 @@
 // MapNotes MCP server (stdio).
 //
-// Usage: tsx mcp/server.ts [graph.yaml]
+// Usage: tsx mcp/server.ts [graph-file]
 //
 // When a graph file is open, every change is written to it immediately.
 // Before each operation the file is re-read, so edits made in the browser are
@@ -493,6 +493,12 @@ server.registerTool(
       color: z.string().optional().describe('Node fill / edge line color'),
       textColor: z.string().optional(),
       borderColor: z.string().optional().describe('Nodes only'),
+      borderWidth: z
+        .number()
+        .min(STYLE_LIMITS.borderWidth.min)
+        .max(STYLE_LIMITS.borderWidth.max)
+        .optional()
+        .describe(`Nodes only, outline width in px, ${STYLE_LIMITS.borderWidth.min}-${STYLE_LIMITS.borderWidth.max} (default 2)`),
       shape: z.enum(NODE_SHAPES).optional().describe('Nodes only'),
       size: z
         .number()

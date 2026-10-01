@@ -133,6 +133,21 @@ describe('normalizeGraph', () => {
     ]);
   });
 
+  it('keeps a node border width, including 0, and parses numeric strings', () => {
+    const g = normalizeGraph({
+      styles: [
+        { id: 'thick', borderWidth: '6' },
+        { id: 'none', borderWidth: 0 },
+        { id: 'bad', borderWidth: 'thin' },
+      ],
+    });
+    expect(g.styles).toEqual([
+      { id: 'thick', target: 'node', borderWidth: 6 },
+      { id: 'none', target: 'node', borderWidth: 0 },
+      { id: 'bad', target: 'node' },
+    ]);
+  });
+
   // The dropped entries are reported as diagnostics; see the tests below and test/validation.test.ts.
   it('currently drops malformed entries and keeps the first duplicate style', () => {
     const g = normalizeGraph({

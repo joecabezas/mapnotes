@@ -78,6 +78,17 @@ function storageSet(key: string, value: string) {
     /* storage unavailable */
   }
 }
+function storageRemove(key: string) {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+function isEmptyGraph(g: Graph): boolean {
+  return !g.nodes.length && !g.edges.length && !g.styles.length && !g.properties.length;
+}
 
 function download(name: string, href: string) {
   const a = document.createElement('a');
@@ -256,7 +267,9 @@ export function App() {
   // ---- Keep every change in the browser, and write it to the linked file.
   useEffect(() => {
     if (!loaded) return;
-    storageSet(LOCAL_KEY, serializeGraphYaml(graph));
+    // An empty graph leaves nothing behind, so a deleted browser copy stays deleted.
+    if (isEmptyGraph(graph)) storageRemove(LOCAL_KEY);
+    else storageSet(LOCAL_KEY, serializeGraphYaml(graph));
     if (skipSave.current) {
       skipSave.current = false;
       return;
@@ -532,6 +545,15 @@ export function App() {
     setSelection(null);
   }, [closeFile, setGraph]);
 
+  /** Erases the graph kept in this browser's local storage; there is no undo. */
+  const deleteBrowserCopy = useCallback(() => {
+    if (!confirm("Delete the graph stored in this browser's local storage? This can't be undone.")) return;
+    storageRemove(LOCAL_KEY);
+    resetGraph(emptyGraph());
+    setSelection(null);
+    toast('Deleted the graph from browser storage');
+  }, [resetGraph, toast]);
+
   const onNodesMoved = useCallback(
     (positions: Record<string, Position>, record: boolean) => {
       apply(
@@ -794,15 +816,27 @@ export function App() {
             {{ saved: 'Saved', saving: 'Saving…', paused: 'Not saving', conflict: 'Conflict' }[file.status]} · {file.handle.name}
           </div>
         ) : (
-          <div
-            className="sync local"
-            data-tip={
-              fileAccessSupported
-                ? 'Not linked to a file: work is kept in this browser. Open a file, or Save to create one.'
-                : 'This browser cannot edit files on disk: work is kept here. Use Download to save a copy.'
-            }
-          >
-            <span className="dot" /> Browser only
+          <div className="sync-group">
+            <div
+              className="sync local"
+              data-tip={
+                fileAccessSupported
+                  ? "Not linked to a file: the graph is kept in this browser's local storage. Open a file, or Save to create one."
+                  : "This browser cannot edit files on disk: the graph is kept in its local storage. Use Download to save a copy."
+              }
+            >
+              <span className="dot" /> Browser storage
+            </div>
+            {!isEmptyGraph(graph) && (
+              <button
+                className="btn ghost small sync-delete"
+                data-tip="Delete the graph from this browser's local storage"
+                aria-label="Delete the graph from browser storage"
+                onClick={deleteBrowserCopy}
+              >
+                Delete
+              </button>
+            )}
           </div>
         )}
         <button

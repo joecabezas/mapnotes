@@ -1,6 +1,5 @@
 node_modules
 dist
 *.tmp
-graph.yaml
 prompt.txt
 .claude/settings.local.json

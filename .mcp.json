@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "mapnotes": {
-      "command": "npx",
-      "args": ["tsx", "mcp/server.ts", "graph.yaml"]
-    }
-  }
-}
