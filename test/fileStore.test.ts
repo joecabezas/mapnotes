@@ -95,8 +95,22 @@ describe('writeGraphText atomicity', () => {
   it.todo('a failed rename removes the temporary file and keeps the previous graph');
 
   // TODO.md: "Preserve the linked file's identity and permissions on write."
-  it.todo('writing through a symlink behaves as documented');
-  it.todo('writing to a restricted-mode file behaves as documented');
+  it('writing through a symlink behaves as documented', async () => {
+    const real = path.join(dir, 'real.yaml');
+    const link = path.join(dir, 'link.yaml');
+    await writeGraphFile(real, emptyGraph());
+    await fs.symlink('real.yaml', link);
+    await writeGraphFile(link, graph);
+    expect((await fs.lstat(link)).isSymbolicLink()).toBe(true);
+    expect(await readGraphFile(real)).toEqual(graph);
+  });
+  it('writing to a restricted-mode file behaves as documented', async () => {
+    const file = path.join(dir, 'g.yaml');
+    await writeGraphFile(file, emptyGraph());
+    await fs.chmod(file, 0o600);
+    await writeGraphFile(file, graph);
+    expect((await fs.stat(file)).mode & 0o777).toBe(0o600);
+  });
 
   // TODO.md: "Treat disappearance of an already linked file as an error."
   it.todo('reading a previously linked file that was deleted fails instead of returning an empty graph');
