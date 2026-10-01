@@ -107,8 +107,16 @@ describe('normalizeGraph', () => {
     expect(g.edges.map((e) => e.id)).toEqual(['e1', 'e2']);
   });
 
-  // TODO.md: "Reserve explicit edge IDs before generating missing ones."
-  it.todo('does not generate an id that a later explicit edge uses (id-less edge before `id: e1`)');
+  it('does not generate an id that a later explicit edge uses (id-less edge before `id: e1`)', () => {
+    const g = normalizeGraph({
+      nodes: [{ id: 'a' }, { id: 'b' }],
+      edges: [
+        { source: 'a', target: 'b' },
+        { id: 'e1', source: 'b', target: 'a' },
+      ],
+    });
+    expect(g.edges.map((e) => e.id)).toEqual(['e2', 'e1']);
+  });
 
   it('normalizes styles and drops unknown enum values and bad icons', () => {
     const g = normalizeGraph({
