@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { readGraphFile, writeGraphFile, writeGraphText } from '../shared/fileStore.ts';
+import { readGraphFile, readGraphFileIfExists, writeGraphFile, writeGraphText } from '../shared/fileStore.ts';
 import { addNode, emptyGraph, normalizeGraph } from '../shared/model.ts';
 import { parseGraphText } from '../shared/yaml.ts';
 
@@ -99,5 +99,12 @@ describe('writeGraphText atomicity', () => {
   it.todo('writing to a restricted-mode file behaves as documented');
 
   // TODO.md: "Treat disappearance of an already linked file as an error."
-  it.todo('reading a previously linked file that was deleted fails instead of returning an empty graph');
+  // The MCP server turns this into an error; see test/linked-missing.test.ts.
+  it('reading a previously linked file that was deleted reports it missing instead of returning an empty graph', async () => {
+    const file = path.join(dir, 'g.yaml');
+    await writeGraphFile(file, graph);
+    expect(await readGraphFileIfExists(file)).toEqual(graph);
+    await fs.rm(file);
+    expect(await readGraphFileIfExists(file)).toBeUndefined();
+  });
 });
