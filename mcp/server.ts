@@ -111,14 +111,16 @@ server.registerTool(
   'get_graph',
   {
     title: 'Get graph',
-    description: 'Return the whole current graph (properties, styles, nodes, edges).',
+    description:
+      'Return the whole current graph (properties, styles, nodes, edges). YAML output starts with a comment naming the current file; JSON output is plain JSON.',
     inputSchema: { format: z.enum(['yaml', 'json']).optional().describe('Output format, default yaml') },
     annotations: { readOnlyHint: true },
   },
   safe(async ({ format }) => {
     const graph = await current();
+    if (format === 'json') return ok(serializeGraph(graph, 'json'));
     const header = currentFile ? `# ${currentFile}\n` : '# (unsaved graph)\n';
-    return ok(header + serializeGraph(graph, format ?? 'yaml'));
+    return ok(header + serializeGraph(graph, 'yaml'));
   }),
 );
 
