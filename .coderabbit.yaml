@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: en-US
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - master
+  path_filters:
+    - "!dist/**"
+    - "!package-lock.json"
+  path_instructions:
+    - path: "mcp/**"
+      instructions: "MCP server code. Check that tool input schemas (zod) match how the handlers use them, and that graph mutations keep the YAML file format consistent with shared/."
+    - path: "web/**"
+      instructions: "React + Cytoscape front end. Watch for stale state in effects and Cytoscape listeners that are added without cleanup."
+chat:
+  auto_reply: true
