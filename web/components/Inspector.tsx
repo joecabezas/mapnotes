@@ -12,6 +12,7 @@ import {
 } from '../../shared/model';
 import { type ArrangeOp, SPACE_GAP } from '../arrange';
 import type { Selection } from './GraphCanvas';
+import { CopyButton } from './CopyButton';
 import { PropertyEditor } from './PropertyEditor';
 
 interface Props {
@@ -60,27 +61,6 @@ const SPACE_BUTTONS: { op: ArrangeOp; tip: string; icon: string }[] = [
     icon: 'M8 2h8v5H8zM8 17h8v5H8zM12 9v6M10 13l2 2 2-2M10 11l2-2 2 2',
   },
 ];
-
-/** Copies `text` to the clipboard, showing a check mark for a moment. */
-function CopyButton({ text, what }: { text: string; what: string }) {
-  const [copied, setCopied] = useState(false);
-  useEffect(() => {
-    if (!copied) return;
-    const t = setTimeout(() => setCopied(false), 1200);
-    return () => clearTimeout(t);
-  }, [copied]);
-  return (
-    <button
-      type="button"
-      className="icon-btn"
-      data-tip={copied ? 'Copied!' : `Copy ${what}`}
-      aria-label={`Copy ${what}`}
-      onClick={() => void navigator.clipboard.writeText(text).then(() => setCopied(true))}
-    >
-      {copied ? '✓' : '⧉'}
-    </button>
-  );
-}
 
 /** Text input that commits on blur / Enter and reverts on Escape. */
 function Field(props: {

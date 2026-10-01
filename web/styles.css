@@ -1318,3 +1318,7 @@ button.sync.error {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+.icon-btn .toolbar-icon {
+  width: 15px;
+  height: 15px;
+}

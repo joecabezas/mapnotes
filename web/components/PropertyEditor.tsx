@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react';
 import type { KeyValue } from '../../shared/model';
+import { CopyButton } from './CopyButton';
 
 interface Props {
   properties: KeyValue[];
   onChange(next: KeyValue[]): void;
   emptyHint?: string;
 }
+
+/** Keys naming an identifier, e.g. "id", "user_id", "Order ID", "nodeId", "ids". */
+const isIdKey = (key: string) => /(?:^|[^a-z])ids?(?![a-z])/i.test(key) || /[a-z]Ids?(?![a-z])/.test(key);
 
 const same = (a: KeyValue[], b: KeyValue[]) =>
   a.length === b.length && a.every((p, i) => p.key === b[i].key && p.value === b[i].value);
@@ -59,9 +63,12 @@ export function PropertyEditor({ properties, onChange, emptyHint }: Props) {
             onBlur={() => commit()}
             onKeyDown={onKey}
           />
+          {isIdKey(row.key) && row.value && <CopyButton text={row.value} what={row.key.trim()} />}
           {/^https?:\/\//.test(row.value) && (
             <a className="icon-btn" href={row.value} target="_blank" rel="noreferrer" data-tip="Open link">
-              ↗
+              <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+              </svg>
             </a>
           )}
           <button
@@ -70,7 +77,9 @@ export function PropertyEditor({ properties, onChange, emptyHint }: Props) {
             aria-label="Remove property"
             onClick={() => commit(rows.filter((_, j) => j !== i))}
           >
-            ×
+            <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2M10 11v6M14 11v6" />
+            </svg>
           </button>
         </div>
       ))}
