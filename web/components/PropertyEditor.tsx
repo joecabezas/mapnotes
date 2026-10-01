@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { KeyValue } from '../../shared/model';
 import { CopyButton } from './CopyButton';
+import { Icon } from './Icon';
 
 interface Props {
   properties: KeyValue[];
@@ -84,7 +85,7 @@ export function PropertyEditor({ properties, onChange, emptyHint }: Props) {
         </div>
       ))}
       <button className="btn small ghost" onClick={() => setRows((rs) => [...rs, { key: '', value: '' }])}>
-        + Add property
+        <Icon name="plus" /> Add property
       </button>
     </div>
   );

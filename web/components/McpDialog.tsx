@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Icon } from './Icon';
 
 const NAME = 'mapnotes';
 const COMMAND = 'npm';
@@ -38,7 +39,8 @@ function Snippet({ text, what }: { text: string; what: string }) {
         aria-label={`Copy ${what}`}
         onClick={() => void navigator.clipboard.writeText(text).then(() => setCopied(true))}
       >
-        {copied ? '✓ Copied' : 'Copy'}
+        <Icon name={copied ? 'check' : 'copy'} />
+        {copied ? 'Copied' : 'Copy'}
       </button>
     </div>
   );
@@ -52,7 +54,7 @@ export function McpDialog({ onClose }: { onClose(): void }) {
           <h2>Install the MCP server</h2>
           <p>Let an AI assistant read and edit your graphs.</p>
           <button className="icon-btn close" onClick={onClose} aria-label="Close">
-            ×
+            <Icon name="close" />
           </button>
         </header>
         <div className="help">

@@ -1,4 +1,5 @@
 import { fileAccessSupported } from '../fileAccess';
+import { Icon } from './Icon';
 
 const SHORTCUTS: [string, string][] = [
   ['N', 'Add a node in the middle of the view'],
@@ -14,6 +15,7 @@ const SHORTCUTS: [string, string][] = [
   ['Ctrl+S', fileAccessSupported ? 'Save to the open file (or choose a new one)' : 'Download the graph as YAML'],
   ['Ctrl+O', 'Open a YAML or JSON graph file'],
   ['F', 'Fit the whole graph in view'],
+  ['L', 'Run the layout again (on the selected nodes only, if two or more are selected)'],
   ['/', 'Search nodes'],
   ['?', 'Show this help'],
 ];
@@ -33,7 +35,7 @@ export function HelpDialog({
         <header className="modal-head">
           <h2>Using MapNotes</h2>
           <button className="icon-btn close" onClick={onClose} aria-label="Close">
-            ×
+            <Icon name="close" />
           </button>
         </header>
         <div className="help">
@@ -49,7 +51,9 @@ export function HelpDialog({
               panel. Hover to preview properties.
             </li>
             <li>
-              <b>Arrange</b>: drag nodes around, or pick an automatic layout. Positions are saved with the graph.
+              <b>Arrange</b>: drag nodes around, or pick an automatic layout (<em>Fewest crossings</em> tries several and keeps
+              the one with the fewest edge crossings). With two or more nodes selected, the layout only moves those.
+              Positions are saved with the graph.
             </li>
             <li>
               <b>Style</b>: create reusable node/edge styles (color, shape, size, line, arrow) in <em>Styles</em>.

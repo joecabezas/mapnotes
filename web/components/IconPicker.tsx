@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { type IconChoice, type IconSource, iconUrl, LUCIDE_SITE, parseIcon, searchLucide, searchSvgl, SVGL_SITE } from '../icons';
+import { Icon } from './Icon';
 
 const RESULT_LIMIT = 120;
 const SEARCH_DELAY_MS = 250;
@@ -69,7 +70,7 @@ export function IconPicker(props: { value?: string; onChange(v: string | undefin
         />
         {props.value && (
           <button type="button" className="icon-btn" data-tip="Remove the icon" aria-label="Remove the icon" onClick={() => props.onChange(undefined)}>
-            ×
+            <Icon name="close" />
           </button>
         )}
         <button type="button" className={`btn small${open ? ' active' : ''}`} onClick={() => setOpen((o) => !o)}>

@@ -14,6 +14,7 @@ import {
 } from '../../shared/model';
 import { iconColorFor, iconKey, parseIcon, useIcons } from '../icons';
 import { IconPicker } from './IconPicker';
+import { Icon } from './Icon';
 import {
   CANVAS_COLORS,
   DEFAULT_ARROW,
@@ -77,7 +78,7 @@ function ColorInput(props: { label: string; value?: string; defaultValue: string
         />
         {props.value && (
           <button className="icon-btn" data-tip="Use theme default" onClick={() => props.onChange(undefined)}>
-            ↺
+            <Icon name="reset" />
           </button>
         )}
       </div>
@@ -219,7 +220,7 @@ export function StylesDialog({ graph, theme, apply, initialId, onClose }: Props)
             Styles are saved in the graph file. Assign them to nodes and edges from the inspector.
           </p>
           <button className="icon-btn close" onClick={onClose} aria-label="Close">
-            ×
+            <Icon name="close" />
           </button>
         </header>
         <div className="styles-layout">
@@ -243,7 +244,7 @@ export function StylesDialog({ graph, theme, apply, initialId, onClose }: Props)
                     </button>
                   ))}
                 <button className="btn small ghost" onClick={() => create(target)}>
-                  + New {target} style
+                  <Icon name="plus" /> New {target} style
                 </button>
               </div>
             ))}

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { addEdge, addNode, emptyGraph, type Graph, type Position, removeEdge, removeNode } from '../shared/model';
 import { formatForPath, parseGraphText, serializeGraph, serializeGraphYaml } from '../shared/yaml';
-import { GraphCanvas, type GraphCanvasHandle, LAYOUTS, type LayoutName, type Selection } from './components/GraphCanvas';
+import { GraphCanvas, type GraphCanvasHandle, type Selection } from './components/GraphCanvas';
+import { LAYOUTS, layoutLabel, type LayoutName } from './layout';
 import { HelpDialog } from './components/HelpDialog';
 import { Inspector } from './components/Inspector';
 import { McpDialog } from './components/McpDialog';
@@ -20,6 +21,7 @@ import { createFilePoll } from './filePoll';
 import { writeFileText as writeTracked, writeFileTextIfUnchanged as writeTrackedIfUnchanged } from './fileSync';
 import type { ThemeName } from './theme';
 import logoUrl from './logo.svg';
+import { Icon } from './components/Icon';
 
 const LOCAL_KEY = 'mapnotes:graph';
 const THEME_KEY = 'mapnotes:theme';
@@ -145,7 +147,7 @@ export function App() {
   const [query, setQuery] = useState('');
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [issues, setIssues] = useState<Issues | null>(null);
-  const [layoutName, setLayoutName] = useState<LayoutName>('elk');
+  const [layoutName, setLayoutName] = useState<LayoutName>('auto');
   const [panelWidth, setPanelWidth] = useState(() => Number(storageGet(PANEL_WIDTH_KEY)) || PANEL_WIDTH_DEFAULT);
   const panelMax = Math.max(PANEL_WIDTH_MIN, window.innerWidth - CANVAS_MIN_WIDTH);
 
@@ -387,6 +389,25 @@ export function App() {
     : null;
   const nodeSelection = (ids: string[]): Selection =>
     ids.length === 0 ? null : ids.length === 1 ? { kind: 'node', id: ids[0] } : { kind: 'nodes', ids };
+
+  // ---- Automatic layout: of the selected nodes when there are several, otherwise of the whole graph.
+  const layoutScope = selectedNodeIds.length >= 2 ? selectedNodeIds : null;
+  const runLayout = useCallback(
+    async (name: LayoutName) => {
+      const result = await canvas.current?.runLayout(name, layoutScope ?? undefined);
+      if (!result) return;
+      const { before, after } = result;
+      const what = name === 'auto' ? `Picked ${layoutLabel(result.algorithm)}` : layoutLabel(name);
+      const scope = layoutScope ? ` (${layoutScope.length} selected nodes)` : '';
+      const plural = (n: number) => (n === 1 ? '' : 's');
+      const crossings =
+        before.crossings === after.crossings
+          ? `${after.crossings} edge crossing${plural(after.crossings)}`
+          : `edge crossings ${before.crossings} → ${after.crossings}`;
+      toast(`${what}${scope}: ${crossings}`);
+    },
+    [layoutScope, toast],
+  );
 
   const canExpand = useMemo(() => {
     const sel = new Set(selectedNodeIds);
@@ -711,6 +732,10 @@ export function App() {
         case 'F':
           canvas.current?.fit();
           break;
+        case 'l':
+        case 'L':
+          void runLayout(layoutName);
+          break;
         case '/':
           e.preventDefault();
           searchInput.current?.focus();
@@ -724,7 +749,7 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [addNodeInView, closeFileDrawer, connect, deleteSelection, expandSelection, fileDrawerOpen, helpOpen, mcpOpen, openAction, redo, save, selection, shrinkSelection, startConnect, stylesOpen, undo]);
+  }, [addNodeInView, closeFileDrawer, connect, deleteSelection, expandSelection, fileDrawerOpen, helpOpen, layoutName, mcpOpen, openAction, redo, runLayout, save, selection, shrinkSelection, startConnect, stylesOpen, undo]);
 
   return (
     <div className="app">
@@ -745,13 +770,19 @@ export function App() {
 
         <div className="toolbar-actions">
           <button className="btn ghost icon" data-tip="Undo (Ctrl+Z)" aria-label="Undo" disabled={!hist.past.length} onClick={undo}>
-            ↶
+            <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M9 14 4 9l5-5" />
+              <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+            </svg>
           </button>
           <button className="btn ghost icon" data-tip="Redo (Ctrl+Shift+Z)" aria-label="Redo" disabled={!hist.future.length} onClick={redo}>
-            ↷
+            <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="m15 14 5-5-5-5" />
+              <path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" />
+            </svg>
           </button>
           <button className="btn primary compact-action" data-tip="Add a node (N) — or double-click the canvas" aria-label="Add node" onClick={addNodeInView}>
-            <span className="action-symbol">+</span><span className="action-label">Node</span>
+            <Icon name="plus" /><span className="action-label">Node</span>
           </button>
           <button
             className={`btn compact-action${connect ? ' active' : ''}`}
@@ -793,17 +824,22 @@ export function App() {
         <div className="toolbar-view">
           <select
             value={layoutName}
-            data-tip="Automatic layout algorithm"
+            data-tip={layoutScope ? `Automatic layout for the ${layoutScope.length} selected nodes` : 'Automatic layout for the whole graph (select nodes to lay out just those)'}
             aria-label="Layout algorithm"
             onChange={(e) => {
               const name = e.target.value as LayoutName;
               setLayoutName(name);
-              canvas.current?.runLayout(name);
+              void runLayout(name);
             }}
           >
             {LAYOUTS.map((l) => <option key={l.name} value={l.name}>{l.label}</option>)}
           </select>
-          <button className="btn ghost icon" data-tip="Run the chosen layout again" aria-label="Run layout again" onClick={() => canvas.current?.runLayout(layoutName)}>
+          <button
+            className={`btn ghost icon${layoutScope ? ' scoped' : ''}`}
+            data-tip={layoutScope ? `Run the layout on the ${layoutScope.length} selected nodes (L)` : 'Run the layout on the whole graph (L)'}
+            aria-label={layoutScope ? 'Run layout on selected nodes' : 'Run layout again'}
+            onClick={() => void runLayout(layoutName)}
+          >
             <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8M21 3v5h-5M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16M8 16H3v5" />
             </svg>
@@ -858,10 +894,10 @@ export function App() {
               aria-label="Toggle theme"
               onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
             >
-              {theme === 'dark' ? '☀️' : '🌙'}
+              <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
             </button>
             <button className="btn ghost icon" data-tip="Help & shortcuts (?)" aria-label="Help" onClick={() => setHelpOpen(true)}>
-              ❔
+              <Icon name="help" />
             </button>
             <a
               className="btn ghost icon github-link"
@@ -914,7 +950,9 @@ export function App() {
         >
           <div className="file-drawer-head">
             <strong>File & actions</strong>
-            <button ref={drawerCloseButton} className="btn ghost icon" aria-label="Close menu" onClick={closeFileDrawer}>×</button>
+            <button ref={drawerCloseButton} className="btn ghost icon" aria-label="Close menu" onClick={closeFileDrawer}>
+              <Icon name="close" />
+            </button>
           </div>
           <div className="file-drawer-content">
             <div className="drawer-section-title">Graph</div>
@@ -1078,7 +1116,7 @@ export function App() {
             </p>
             <div className="row center">
               <button className="btn primary" onClick={addNodeInView}>
-                + Add first node
+                <Icon name="plus" /> Add first node
               </button>
               <button className="btn" onClick={() => void openAction()}>
                 Open a file

@@ -240,10 +240,6 @@ code,
   flex: none;
   fill: currentColor;
 }
-.action-symbol {
-  font-size: 16px;
-  line-height: 1;
-}
 
 .toolbar select,
 .field select,
@@ -386,6 +382,11 @@ button.sync.error {
 .btn.active {
   background: color-mix(in srgb, var(--ok) 25%, transparent);
   border-color: var(--ok);
+}
+.btn.scoped {
+  /* The layout button acts on the selection only. */
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .btn.danger {
   color: var(--danger);
@@ -1045,7 +1046,6 @@ button.sync.error {
   position: absolute;
   top: 12px;
   right: 12px;
-  font-size: 20px;
 }
 
 .help {
@@ -1322,4 +1322,12 @@ button.sync.error {
 .icon-btn .toolbar-icon {
   width: 15px;
   height: 15px;
+}
+.btn.small .toolbar-icon,
+.link .toolbar-icon {
+  width: 14px;
+  height: 14px;
+}
+.link .toolbar-icon {
+  vertical-align: -2px;
 }

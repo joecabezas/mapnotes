@@ -14,6 +14,7 @@ import { type ArrangeOp, SPACE_GAP } from '../arrange';
 import type { Selection } from './GraphCanvas';
 import { CopyButton } from './CopyButton';
 import { PropertyEditor } from './PropertyEditor';
+import { Icon } from './Icon';
 
 interface Props {
   graph: Graph;
@@ -139,7 +140,7 @@ function StyleSelect(props: {
           aria-label="Edit styles"
           onClick={() => props.onManage(props.value || undefined)}
         >
-          🎨
+          <Icon name="palette" />
         </button>
       </div>
     </label>
@@ -202,7 +203,7 @@ function NodePanel({ node, ...p }: Props & { node: GraphNode }) {
             return (
               <li key={e.id}>
                 <button className="link" onClick={() => p.onSelect({ kind: 'edge', id: e.id })} data-tip="Select edge">
-                  {out ? '→' : '←'} {e.label || e.id}
+                  <Icon name={out ? 'arrowRight' : 'arrowLeft'} /> {e.label || e.id}
                 </button>
                 <button className="link muted" onClick={() => p.onSelect({ kind: 'node', id: other })} data-tip="Select node">
                   {labelOf(other)}
@@ -212,7 +213,7 @@ function NodePanel({ node, ...p }: Props & { node: GraphNode }) {
           })}
         </ul>
         <button className="btn small" onClick={() => p.onConnectFrom(node.id)} data-tip="Then click the target node (E)">
-          + Connect to…
+          <Icon name="plus" /> Connect to…
         </button>
       </section>
       <footer className="panel-foot">
@@ -277,7 +278,7 @@ function EdgePanel({ edge, ...p }: Props & { edge: GraphEdge }) {
           data-tip="Swap source and target"
           onClick={() => p.apply((g) => editEdge(g, { id: edge.id, source: edge.target, target: edge.source }).graph)}
         >
-          ⇄ Reverse direction
+          <Icon name="swap" /> Reverse direction
         </button>
         <StyleSelect
           styles={p.graph.styles}
@@ -347,12 +348,12 @@ function GraphPanel(p: Props) {
         />
         {!title ? (
           <button className="btn small ghost" data-tip="Name the graph, with an optional line under it" onClick={() => addProps(['title', 'subtitle'])}>
-            + Title &amp; subtitle
+            <Icon name="plus" /> Title &amp; subtitle
           </button>
         ) : (
           !subtitle && (
             <button className="btn small ghost" data-tip="A line shown under the title" onClick={() => addProps(['subtitle'])}>
-              + Subtitle
+              <Icon name="plus" /> Subtitle
             </button>
           )
         )}
@@ -369,7 +370,7 @@ function GraphPanel(p: Props) {
           {graph.styles.length === 0 && <p className="muted small">No styles yet — everything uses the theme defaults.</p>}
         </div>
         <button className="btn small" onClick={() => p.onOpenStyles()}>
-          🎨 Manage styles
+          <Icon name="palette" /> Manage styles
         </button>
       </section>
       <section>
