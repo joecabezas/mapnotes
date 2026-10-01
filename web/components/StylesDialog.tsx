@@ -34,6 +34,8 @@ interface Props {
   /** Current canvas theme, used to show the default colors. */
   theme: ThemeName;
   apply(op: (g: Graph) => Graph): boolean;
+  /** Style to show first; falls back to the first style. */
+  initialId?: string;
   onClose(): void;
 }
 
@@ -185,9 +187,11 @@ function Preview({ style, defaultFill }: { style: Style; defaultFill: string }) 
   );
 }
 
-export function StylesDialog({ graph, theme, apply, onClose }: Props) {
+export function StylesDialog({ graph, theme, apply, initialId, onClose }: Props) {
   const colors = CANVAS_COLORS[theme];
-  const [selectedId, setSelectedId] = useState<string | null>(graph.styles[0]?.id ?? null);
+  const [selectedId, setSelectedId] = useState<string | null>(
+    graph.styles.some((s) => s.id === initialId) ? initialId! : (graph.styles[0]?.id ?? null),
+  );
   const selected = graph.styles.find((s) => s.id === selectedId) ?? null;
   const usage = (s: Style) =>
     s.target === 'node' ? graph.nodes.filter((n) => n.style === s.id).length : graph.edges.filter((e) => e.style === s.id).length;

@@ -137,8 +137,10 @@ export function App() {
   const [connect, setConnect] = useState<{ source: string | null } | null>(null);
   const [theme, setTheme] = useState<ThemeName>(() => (storageGet(THEME_KEY) === 'light' ? 'light' : 'dark'));
   const [stylesOpen, setStylesOpen] = useState(false);
+  const [stylesInitialId, setStylesInitialId] = useState<string | undefined>();
   const [helpOpen, setHelpOpen] = useState(false);
   const [mcpOpen, setMcpOpen] = useState(false);
+  const [fileDrawerOpen, setFileDrawerOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [issues, setIssues] = useState<Issues | null>(null);
@@ -149,6 +151,8 @@ export function App() {
   const canvas = useRef<GraphCanvasHandle>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const searchInput = useRef<HTMLInputElement>(null);
+  const fileDrawerButton = useRef<HTMLButtonElement>(null);
+  const drawerCloseButton = useRef<HTMLButtonElement>(null);
   const skipSave = useRef(true);
   /** File contents as last read or written by us, to tell our own writes from other tools' edits. */
   const fileText = useRef<string | null>(null);
@@ -599,6 +603,20 @@ export function App() {
     toast('Deleted the graph from browser storage');
   }, [resetGraph, toast]);
 
+  const closeFileDrawer = useCallback(() => {
+    setFileDrawerOpen(false);
+    fileDrawerButton.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    if (fileDrawerOpen) drawerCloseButton.current?.focus();
+  }, [fileDrawerOpen]);
+
+  const runDrawerAction = (action: () => void) => {
+    closeFileDrawer();
+    action();
+  };
+
   const onNodesMoved = useCallback(
     (positions: Record<string, Position>, record: boolean) => {
       apply(
@@ -635,6 +653,10 @@ export function App() {
       if (mod && e.key.toLowerCase() === 'o') {
         e.preventDefault();
         void openAction();
+        return;
+      }
+      if (fileDrawerOpen) {
+        if (e.key === 'Escape') closeFileDrawer();
         return;
       }
       if (isTyping(e)) return;
@@ -701,84 +723,39 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [addNodeInView, connect, deleteSelection, expandSelection, helpOpen, mcpOpen, openAction, redo, save, selection, shrinkSelection, startConnect, stylesOpen, undo]);
+  }, [addNodeInView, closeFileDrawer, connect, deleteSelection, expandSelection, fileDrawerOpen, helpOpen, mcpOpen, openAction, redo, save, selection, shrinkSelection, startConnect, stylesOpen, undo]);
 
   return (
     <div className="app">
       <header className="toolbar">
+        <button
+          ref={fileDrawerButton}
+          className="btn ghost icon hamburger"
+          aria-label="Open file and edit menu"
+          aria-expanded={fileDrawerOpen}
+          aria-controls="file-drawer"
+          onClick={() => setFileDrawerOpen(true)}
+        >
+          <span aria-hidden="true"><i /><i /><i /></span>
+        </button>
         <div className="brand" data-tip="MapNotes: a render engine for your graphs">
-          <span className="logo">◉</span> MapNotes
+          <span className="logo">◉</span> <span className="brand-name">MapNotes</span>
         </div>
 
-        <div className="group">
-          <button className="btn ghost" data-tip="Start a new, empty graph" onClick={newGraph}>
-            New
-          </button>
-          <button
-            className="btn ghost"
-            data-tip={
-              fileAccessSupported
-                ? 'Open a YAML or JSON graph file; changes are saved back to it (Ctrl+O)'
-                : 'Open a YAML or JSON graph file (Ctrl+O)'
-            }
-            onClick={() => void openAction()}
-          >
-            Open
-          </button>
-          {fileAccessSupported ? (
-            <button
-              className="btn ghost"
-              data-tip={file ? `Save to ${file.handle.name} (Ctrl+S)` : 'Save the graph to a file on disk (Ctrl+S)'}
-              onClick={() => void save()}
-            >
-              Save
-            </button>
-          ) : (
-            <button className="btn ghost" data-tip="Download the graph as YAML (Ctrl+S)" onClick={() => saveAs('yaml')}>
-              Download
-            </button>
-          )}
-          <details className="menu">
-            <summary className="btn ghost" data-tip="More save and export options" aria-label="More save and export options">
-              ▾
-            </summary>
-            <div className="menu-items" onClick={(e) => (e.currentTarget.parentElement as HTMLDetailsElement).removeAttribute('open')}>
-              {fileAccessSupported && <button onClick={() => void saveToNewFile()}>Save as…</button>}
-              {file && <button onClick={closeFile}>Close file (keep in browser)</button>}
-              <button onClick={() => saveAs('yaml')}>Download YAML</button>
-              <button onClick={() => saveAs('json')}>Download JSON</button>
-              <button onClick={() => saveAs('png')}>Export PNG image</button>
-            </div>
-          </details>
-          <input
-            ref={fileInput}
-            type="file"
-            accept=".yaml,.yml,.json,application/json,text/yaml"
-            hidden
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) openFile(f);
-              e.target.value = '';
-            }}
-          />
-        </div>
-
-        <div className="group">
+        <div className="toolbar-actions">
           <button className="btn ghost icon" data-tip="Undo (Ctrl+Z)" aria-label="Undo" disabled={!hist.past.length} onClick={undo}>
             ↶
           </button>
           <button className="btn ghost icon" data-tip="Redo (Ctrl+Shift+Z)" aria-label="Redo" disabled={!hist.future.length} onClick={redo}>
             ↷
           </button>
-        </div>
-
-        <div className="group">
-          <button className="btn primary" data-tip="Add a node (N) — or double-click the canvas" onClick={addNodeInView}>
-            + Node
+          <button className="btn primary compact-action" data-tip="Add a node (N) — or double-click the canvas" aria-label="Add node" onClick={addNodeInView}>
+            <span className="action-symbol">+</span><span className="action-label">Node</span>
           </button>
           <button
-            className={`btn${connect ? ' active' : ''}`}
+            className={`btn compact-action${connect ? ' active' : ''}`}
             data-tip="Connect two nodes with an edge (E): click the source, then the target"
+            aria-label="Connect nodes"
             onClick={() => (connect ? setConnect(null) : startConnect(selection?.kind === 'node' ? selection.id : null))}
           >
             <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -786,7 +763,7 @@ export function App() {
               <circle cx="5" cy="19" r="2" />
               <path d="M5 17A12 12 0 0 1 17 5" />
             </svg>
-            Connect
+            <span className="action-label">Connect</span>
           </button>
           <button
             className="btn ghost icon"
@@ -810,12 +787,9 @@ export function App() {
               <path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7" />
             </svg>
           </button>
-          <button className="btn ghost" data-tip="Delete the selection (Del)" disabled={!selection} onClick={deleteSelection}>
-            Delete
-          </button>
         </div>
 
-        <div className="group">
+        <div className="toolbar-view">
           <select
             value={layoutName}
             data-tip="Automatic layout algorithm"
@@ -826,18 +800,9 @@ export function App() {
               canvas.current?.runLayout(name);
             }}
           >
-            {LAYOUTS.map((l) => (
-              <option key={l.name} value={l.name}>
-                {l.label}
-              </option>
-            ))}
+            {LAYOUTS.map((l) => <option key={l.name} value={l.name}>{l.label}</option>)}
           </select>
-          <button
-            className="btn ghost icon"
-            data-tip="Run the chosen layout again"
-            aria-label="Run the layout again"
-            onClick={() => canvas.current?.runLayout(layoutName)}
-          >
+          <button className="btn ghost icon" data-tip="Run the chosen layout again" aria-label="Run layout again" onClick={() => canvas.current?.runLayout(layoutName)}>
             <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8M21 3v5h-5M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16M8 16H3v5" />
             </svg>
@@ -847,7 +812,7 @@ export function App() {
               <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" />
             </svg>
           </button>
-          <button className="btn ghost" data-tip="Colors, shapes, sizes and line styles" onClick={() => setStylesOpen(true)}>
+          <button className="btn ghost" data-tip="Colors, shapes, sizes and line styles" onClick={() => { setStylesInitialId(undefined); setStylesOpen(true); }}>
             <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z" />
               <circle cx="13.5" cy="6.5" r=".5" />
@@ -859,92 +824,118 @@ export function App() {
           </button>
         </div>
 
-        <div className="search" data-tip="Search nodes by label, id or property (/)">
-          <input
-            ref={searchInput}
-            value={query}
-            placeholder="Search…"
-            aria-label="Search nodes"
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') {
-                setQuery('');
-                e.currentTarget.blur();
-              }
-              if (e.key === 'Enter' && matches?.length) {
-                const sel = { kind: 'node' as const, id: matches[0] };
-                setSelection(sel);
-                canvas.current?.center(sel);
-              }
-            }}
-          />
-          {matches && <span className="count">{matches.length}</span>}
+        <div className="toolbar-end">
+          <div className="search" data-tip="Search nodes by label, id or property (/)">
+            <input
+              ref={searchInput}
+              value={query}
+              placeholder="Search…"
+              aria-label="Search nodes"
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  setQuery('');
+                  e.currentTarget.blur();
+                }
+                if (e.key === 'Enter' && matches?.length) {
+                  const sel = { kind: 'node' as const, id: matches[0] };
+                  setSelection(sel);
+                  canvas.current?.center(sel);
+                }
+              }}
+            />
+            {matches && <span className="count">{matches.length}</span>}
+          </div>
+
+          <div className="toolbar-utilities">
+            <button className="btn ghost" data-tip="Let an AI assistant edit your graphs" onClick={() => setMcpOpen(true)}>
+              Install MCP
+            </button>
+            <button
+              className="btn ghost icon"
+              data-tip={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+              aria-label="Toggle theme"
+              onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+            >
+              {theme === 'dark' ? '☀️' : '🌙'}
+            </button>
+            <button className="btn ghost icon" data-tip="Help & shortcuts (?)" aria-label="Help" onClick={() => setHelpOpen(true)}>
+              ❔
+            </button>
+            <a
+              className="btn ghost icon github-link"
+              href="https://github.com/joecabezas/mapnotes"
+              target="_blank"
+              rel="noopener noreferrer"
+              data-tip="View MapNotes on GitHub"
+              aria-label="View MapNotes on GitHub (opens in a new tab)"
+            >
+              <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.65 7.65 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.28.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.94-.01 2.21 0 .21.15.46.55.38A8 8 0 0 0 8 0Z" />
+              </svg>
+            </a>
+          </div>
         </div>
 
-        <div className="spacer" />
-        {file?.status === 'reconnect' ? (
-          <button
-            className="sync reconnect"
-            data-tip={`The browser needs your permission again to edit ${file.handle.name}`}
-            onClick={() => void reconnectFile()}
-          >
-            <span className="dot" /> Reconnect {file.handle.name}
-          </button>
-        ) : file?.status === 'error' ? (
-          <button
-            className="sync error"
-            data-tip={`The last save to ${file.handle.name} failed: click (or Ctrl+S) to try again`}
-            onClick={() => void save()}
-          >
-            <span className="dot" /> Save failed · Retry {file.handle.name}
-          </button>
-        ) : file ? (
-          <div
-            className={`sync ${file.status}`}
-            data-tip={`Changes are saved to ${file.handle.name}; edits to it from other tools (e.g. the MCP server) show up here.`}
-          >
-            <span className="dot" />{' '}
-            {{ saved: 'Saved', saving: 'Saving…', paused: 'Not saving', conflict: 'Conflict' }[file.status]} · {file.handle.name}
+        <input
+          ref={fileInput}
+          type="file"
+          accept=".yaml,.yml,.json,application/json,text/yaml"
+          hidden
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) openFile(f);
+            e.target.value = '';
+          }}
+        />
+      </header>
+
+      <div className={`drawer-layer${fileDrawerOpen ? ' open' : ''}`} inert={!fileDrawerOpen} aria-hidden={!fileDrawerOpen}>
+        <div className="drawer-backdrop" onClick={closeFileDrawer} />
+        <aside
+          id="file-drawer"
+          className="file-drawer"
+          role="dialog"
+          aria-modal="true"
+          aria-label="File and edit actions"
+          onKeyDown={(e) => {
+            if (e.key !== 'Tab') return;
+            const buttons = Array.from(e.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'));
+            if (!buttons.length) return;
+            if (e.shiftKey && document.activeElement === buttons[0]) {
+              e.preventDefault();
+              buttons[buttons.length - 1].focus();
+            } else if (!e.shiftKey && document.activeElement === buttons[buttons.length - 1]) {
+              e.preventDefault();
+              buttons[0].focus();
+            }
+          }}
+        >
+          <div className="file-drawer-head">
+            <strong>File & actions</strong>
+            <button ref={drawerCloseButton} className="btn ghost icon" aria-label="Close menu" onClick={closeFileDrawer}>×</button>
           </div>
-        ) : (
-          <div className="sync-group">
-            <div
-              className="sync local"
-              data-tip={
-                fileAccessSupported
-                  ? "Not linked to a file: the graph is kept in this browser's local storage. Open a file, or Save to create one."
-                  : "This browser cannot edit files on disk: the graph is kept in its local storage. Use Download to save a copy."
-              }
-            >
-              <span className="dot" /> Browser storage
-            </div>
-            {!isEmptyGraph(graph) && (
-              <button
-                className="btn ghost small sync-delete"
-                data-tip="Delete the graph from this browser's local storage"
-                aria-label="Delete the graph from browser storage"
-                onClick={deleteBrowserCopy}
-              >
-                Delete
-              </button>
+          <div className="file-drawer-content">
+            <div className="drawer-section-title">Graph</div>
+            <button onClick={() => runDrawerAction(newGraph)}>New graph</button>
+            <button onClick={() => runDrawerAction(() => void openAction())}>Open file…</button>
+            <button onClick={() => runDrawerAction(() => void save())}>{fileAccessSupported ? 'Save' : 'Download YAML'}</button>
+            {fileAccessSupported && <button onClick={() => runDrawerAction(() => void saveToNewFile())}>Save as…</button>}
+            {file && <button onClick={() => runDrawerAction(closeFile)}>Close file (keep in browser)</button>}
+
+            <div className="drawer-section-title">Export</div>
+            {fileAccessSupported && <button onClick={() => runDrawerAction(() => saveAs('yaml'))}>Download YAML</button>}
+            <button onClick={() => runDrawerAction(() => saveAs('json'))}>Download JSON</button>
+            <button onClick={() => runDrawerAction(() => saveAs('png'))}>Export PNG image</button>
+
+            <div className="drawer-section-title">Edit</div>
+            <button disabled={!selection} onClick={() => runDrawerAction(deleteSelection)}>Delete selection</button>
+            {!file && !isEmptyGraph(graph) && (
+              <button className="drawer-danger" onClick={() => runDrawerAction(deleteBrowserCopy)}>Delete browser copy</button>
             )}
           </div>
-        )}
-        <button
-          className="btn ghost icon"
-          data-tip={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-          aria-label="Toggle theme"
-          onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
-        >
-          {theme === 'dark' ? '☀' : '☾'}
-        </button>
-        <button className="btn ghost" data-tip="Let an AI assistant edit your graphs" onClick={() => setMcpOpen(true)}>
-          Install MCP
-        </button>
-        <button className="btn ghost icon" data-tip="Help & shortcuts (?)" aria-label="Help" onClick={() => setHelpOpen(true)}>
-          ?
-        </button>
-      </header>
+        </aside>
+      </div>
 
       <main className="main" style={{ '--inspector-width': `${Math.min(panelWidth, panelMax)}px` } as React.CSSProperties}>
         <GraphCanvas
@@ -960,6 +951,46 @@ export function App() {
           onBackgroundDoubleTap={addNodeAt}
           onNodesMoved={onNodesMoved}
         />
+
+        <div className="graph-status" role="status" aria-live="polite">
+          {file?.status === 'reconnect' ? (
+            <button
+              className="sync reconnect"
+              data-tip={`The browser needs your permission again to edit ${file.handle.name}`}
+              onClick={() => void reconnectFile()}
+            >
+              <span className="dot" /> <span className="sync-label">Reconnect {file.handle.name}</span>
+            </button>
+          ) : file?.status === 'error' ? (
+            <button
+              className="sync error"
+              data-tip={`The last save to ${file.handle.name} failed: click (or Ctrl+S) to try again`}
+              onClick={() => void save()}
+            >
+              <span className="dot" /> <span className="sync-label">Save failed · Retry {file.handle.name}</span>
+            </button>
+          ) : file ? (
+            <div
+              className={`sync ${file.status}`}
+              data-tip={`Changes are saved to ${file.handle.name}; edits to it from other tools (e.g. the MCP server) show up here.`}
+            >
+              <span className="dot" /> <span className="sync-label">
+                {{ saved: 'Saved', saving: 'Saving…', paused: 'Not saving', conflict: 'Conflict' }[file.status]} · {file.handle.name}
+              </span>
+            </div>
+          ) : (
+            <div
+              className="sync local"
+              data-tip={
+                fileAccessSupported
+                  ? "Not linked to a file: the graph is kept in this browser's local storage. Open a file, or Save to create one."
+                  : "This browser cannot edit files on disk: the graph is kept in its local storage. Use Download to save a copy."
+              }
+            >
+              <span className="dot" /> <span className="sync-label">Browser storage</span>
+            </div>
+          )}
+        </div>
 
         {connect && (
           <div className="banner">
@@ -1073,12 +1104,23 @@ export function App() {
               if (sel) canvas.current?.center(sel);
             }}
             onConnectFrom={(id) => startConnect(id)}
-            onOpenStyles={() => setStylesOpen(true)}
+            onOpenStyles={(styleId) => {
+              setStylesInitialId(styleId);
+              setStylesOpen(true);
+            }}
           />
         </aside>
       </main>
 
-      {stylesOpen && <StylesDialog graph={graph} theme={theme} apply={apply} onClose={() => setStylesOpen(false)} />}
+      {stylesOpen && (
+        <StylesDialog
+          graph={graph}
+          theme={theme}
+          apply={apply}
+          initialId={stylesInitialId}
+          onClose={() => setStylesOpen(false)}
+        />
+      )}
       {helpOpen && (
         <HelpDialog
           onClose={() => setHelpOpen(false)}

@@ -20,7 +20,8 @@ interface Props {
   apply(op: (g: Graph) => Graph): boolean;
   onSelect(sel: Selection): void;
   onConnectFrom(nodeId: string): void;
-  onOpenStyles(): void;
+  /** Opens the styles dialog, optionally with `styleId` selected. */
+  onOpenStyles(styleId?: string): void;
 }
 
 /** Copies `text` to the clipboard, showing a check mark for a moment. */
@@ -98,7 +99,7 @@ function StyleSelect(props: {
   target: Style['target'];
   value?: string;
   onChange(v: string): void;
-  onManage(): void;
+  onManage(styleId?: string): void;
 }) {
   const options = props.styles.filter((s) => s.target === props.target);
   const current = options.find((s) => s.id === props.value);
@@ -115,7 +116,12 @@ function StyleSelect(props: {
             </option>
           ))}
         </select>
-        <button className="icon-btn" data-tip="Edit styles" aria-label="Edit styles" onClick={props.onManage}>
+        <button
+          className="icon-btn"
+          data-tip="Edit styles"
+          aria-label="Edit styles"
+          onClick={() => props.onManage(props.value || undefined)}
+        >
           🎨
         </button>
       </div>
@@ -345,7 +351,7 @@ function GraphPanel(p: Props) {
           ))}
           {graph.styles.length === 0 && <p className="muted small">No styles yet — everything uses the theme defaults.</p>}
         </div>
-        <button className="btn small" onClick={p.onOpenStyles}>
+        <button className="btn small" onClick={() => p.onOpenStyles()}>
           🎨 Manage styles
         </button>
       </section>
