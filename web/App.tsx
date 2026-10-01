@@ -36,8 +36,10 @@ const FILE_SAVE_DELAY_MS = 300;
 /**
  * The file on disk the graph is linked to. `reconnect`: the browser remembered
  * the file from a previous visit but needs a click to grant access again.
+ * `conflict`: another tool changed the file while a browser edit was waiting to
+ * be written; nothing is written until the user picks which version to keep.
  */
-type FileStatus = 'saved' | 'saving' | 'error' | 'reconnect';
+type FileStatus = 'saved' | 'saving' | 'error' | 'reconnect' | 'conflict';
 interface OpenFile {
   handle: FileSystemFileHandle;
   status: FileStatus;
@@ -91,6 +93,10 @@ function fileBaseName(graph: Graph): string {
 /** Graph text in the format implied by the file's extension (.json or YAML). */
 function textFor(graph: Graph, fileName: string): string {
   return serializeGraph(graph, formatForPath(fileName));
+}
+
+function conflictMessage(fileName: string): string {
+  return `${fileName} was changed by another tool: choose which version to keep`;
 }
 
 function isTyping(e: KeyboardEvent) {
@@ -197,6 +203,22 @@ export function App() {
     [resetGraph, setGraph, toast],
   );
 
+  /**
+   * Writes `text` to the linked file unless another tool changed the file since we
+   * last read or wrote it; then the file is flagged as in conflict and left alone.
+   */
+  const writeLinked = useCallback(async (handle: FileSystemFileHandle, text: string): Promise<boolean> => {
+    const disk = await readHandle(handle);
+    if (fileText.current !== null && disk.text !== fileText.current) {
+      setFile((f) => (f?.handle === handle ? { ...f, status: 'conflict' } : f));
+      return false;
+    }
+    fileText.current = text;
+    fileModified.current = await writeHandle(handle, text);
+    setFile((f) => (f?.handle === handle ? { ...f, status: 'saved' } : f));
+    return true;
+  }, []);
+
   // ---- Initial load: the browser copy first, then the file linked last time (if any).
   useEffect(() => {
     let initial = emptyGraph();
@@ -227,7 +249,9 @@ export function App() {
       skipSave.current = false;
       return;
     }
-    const handle = fileRef.current?.status === 'reconnect' ? null : fileRef.current?.handle;
+    const status = fileRef.current?.status;
+    // In conflict, edits stay in the browser until the user resolves it.
+    const handle = status === 'reconnect' || status === 'conflict' ? null : fileRef.current?.handle;
     if (!handle) return;
     const text = textFor(graph, handle.name);
     if (text === fileText.current) {
@@ -237,17 +261,15 @@ export function App() {
     }
     setFile((f) => f && { ...f, status: 'saving' });
     const timer = setTimeout(async () => {
-      fileText.current = text;
       try {
-        fileModified.current = await writeHandle(handle, text);
-        setFile((f) => (f?.handle === handle ? { ...f, status: 'saved' } : f));
+        if (!(await writeLinked(handle, text))) toast(conflictMessage(handle.name), 'error');
       } catch (err) {
         setFile((f) => (f?.handle === handle ? { ...f, status: 'error' } : f));
         toast(`Could not save ${handle.name}: ${(err as Error).message}`, 'error');
       }
     }, FILE_SAVE_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [graph, loaded, toast]);
+  }, [graph, loaded, toast, writeLinked]);
 
   // ---- Pick up changes other tools (e.g. the MCP server) make to the linked file.
   const watchedHandle = file && file.status !== 'reconnect' ? file.handle : null;
@@ -255,7 +277,7 @@ export function App() {
     if (!watchedHandle) return;
     let busy = false;
     const timer = setInterval(async () => {
-      if (busy || fileRef.current?.status === 'saving') return;
+      if (busy || fileRef.current?.status === 'saving' || fileRef.current?.status === 'conflict') return;
       busy = true;
       try {
         const current = await watchedHandle.getFile();
@@ -434,17 +456,53 @@ export function App() {
       await reconnectFile();
       return;
     }
-    const text = textFor(graphRef.current, f.handle.name);
-    fileText.current = text;
+    if (f.status === 'conflict') {
+      toast(conflictMessage(f.handle.name), 'error');
+      return;
+    }
     try {
-      fileModified.current = await writeHandle(f.handle, text);
-      setFile((cur) => (cur?.handle === f.handle ? { ...cur, status: 'saved' } : cur));
-      toast(`Saved to ${f.handle.name}`);
+      if (await writeLinked(f.handle, textFor(graphRef.current, f.handle.name))) toast(`Saved to ${f.handle.name}`);
+      else toast(conflictMessage(f.handle.name), 'error');
     } catch (err) {
       setFile((cur) => (cur?.handle === f.handle ? { ...cur, status: 'error' } : cur));
       toast(`Could not save ${f.handle.name}: ${(err as Error).message}`, 'error');
     }
-  }, [reconnectFile, saveAs, saveToNewFile, toast]);
+  }, [reconnectFile, saveAs, saveToNewFile, toast, writeLinked]);
+
+  /**
+   * Settles a conflict with the linked file. Either way the other version stays one
+   * undo step away: `theirs` loads the file (Ctrl+Z restores the browser's version),
+   * `mine` writes the browser's version (Ctrl+Z restores the file's).
+   */
+  const resolveConflict = useCallback(
+    async (keep: 'mine' | 'theirs') => {
+      const f = fileRef.current;
+      if (f?.status !== 'conflict') return;
+      const { handle } = f;
+      try {
+        const { text, lastModified } = await readHandle(handle);
+        const theirs = parseGraphText(text);
+        if (keep === 'theirs') {
+          fileText.current = text;
+          fileModified.current = lastModified;
+          setGraph(theirs, { fromRemote: true });
+          setFile((cur) => (cur?.handle === handle ? { ...cur, status: 'saved' } : cur));
+          toast(`Loaded ${handle.name}; Ctrl+Z brings back your version`);
+          return;
+        }
+        const mine = graphRef.current;
+        const mineText = textFor(mine, handle.name);
+        fileText.current = mineText;
+        fileModified.current = await writeHandle(handle, mineText);
+        setHist((h) => ({ graph: mine, past: [...h.past, theirs].slice(-HISTORY_LIMIT), future: [], lastAt: 0 }));
+        setFile((cur) => (cur?.handle === handle ? { ...cur, status: 'saved' } : cur));
+        toast(`Saved your version to ${handle.name}; Ctrl+Z brings back the file's version`);
+      } catch (err) {
+        toast(`Could not resolve the conflict with ${handle.name}: ${(err as Error).message}`, 'error');
+      }
+    },
+    [setGraph, toast],
+  );
 
   // New graphs are unlinked first, so they never overwrite the open file.
   const newGraph = useCallback(() => {
@@ -704,7 +762,8 @@ export function App() {
             className={`sync ${file.status}`}
             data-tip={`Changes are saved to ${file.handle.name}; edits to it from other tools (e.g. the MCP server) show up here.`}
           >
-            <span className="dot" /> {{ saved: 'Saved', saving: 'Saving…', error: 'Save failed' }[file.status]} · {file.handle.name}
+            <span className="dot" /> {{ saved: 'Saved', saving: 'Saving…', error: 'Save failed', conflict: 'Conflict' }[file.status]} ·{' '}
+            {file.handle.name}
           </div>
         ) : (
           <div
@@ -758,6 +817,35 @@ export function App() {
             )}
             <button className="btn small ghost" onClick={() => setConnect(null)}>
               Cancel (Esc)
+            </button>
+          </div>
+        )}
+
+        {file?.status === 'conflict' && (
+          <div className="banner conflict" role="alert">
+            <span>
+              <b>{file.handle.name}</b> was changed by another tool while you were editing
+            </span>
+            <button
+              className="btn small"
+              data-tip="Load the file's version; Ctrl+Z brings back yours"
+              onClick={() => void resolveConflict('theirs')}
+            >
+              Use file's version
+            </button>
+            <button
+              className="btn small"
+              data-tip="Overwrite the file with your version; Ctrl+Z brings back the file's"
+              onClick={() => void resolveConflict('mine')}
+            >
+              Keep mine
+            </button>
+            <button
+              className="btn small ghost"
+              data-tip="Save your version to a new file and leave this one as it is"
+              onClick={() => void saveToNewFile()}
+            >
+              Save mine as…
             </button>
           </div>
         )}
