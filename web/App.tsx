@@ -126,11 +126,24 @@ export function App() {
   /** File contents as last read or written by us, to tell our own writes from other tools' edits. */
   const fileText = useRef<string | null>(null);
   const fileModified = useRef(0);
+  /** Text of a write still in flight, so the file watcher doesn't mistake it for another tool's edit. */
+  const writingText = useRef<string | null>(null);
 
   const toast = useCallback((text: string, kind: Toast['kind'] = 'info') => {
     const id = Date.now() + Math.random();
     setToasts((t) => [...t.slice(-3), { id, text, kind }]);
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), kind === 'error' ? 6000 : 3000);
+  }, []);
+
+  /** Writes `text` to the file; only a successful write counts as what's on disk. */
+  const writeFileText = useCallback(async (handle: FileSystemFileHandle, text: string) => {
+    writingText.current = text;
+    try {
+      fileModified.current = await writeHandle(handle, text);
+      fileText.current = text;
+    } finally {
+      writingText.current = null;
+    }
   }, []);
 
   /** Replaces the graph. `record` adds an undo step; `fromRemote` skips writing it back. */
@@ -237,9 +250,8 @@ export function App() {
     }
     setFile((f) => f && { ...f, status: 'saving' });
     const timer = setTimeout(async () => {
-      fileText.current = text;
       try {
-        fileModified.current = await writeHandle(handle, text);
+        await writeFileText(handle, text);
         setFile((f) => (f?.handle === handle ? { ...f, status: 'saved' } : f));
       } catch (err) {
         setFile((f) => (f?.handle === handle ? { ...f, status: 'error' } : f));
@@ -247,7 +259,7 @@ export function App() {
       }
     }, FILE_SAVE_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [graph, loaded, toast]);
+  }, [graph, loaded, toast, writeFileText]);
 
   // ---- Pick up changes other tools (e.g. the MCP server) make to the linked file.
   const watchedHandle = file && file.status !== 'reconnect' ? file.handle : null;
@@ -262,7 +274,7 @@ export function App() {
         if (current.lastModified === fileModified.current) return;
         fileModified.current = current.lastModified;
         const text = await current.text();
-        if (text === fileText.current) return;
+        if (text === fileText.current || text === writingText.current) return;
         const next = parseGraphText(text);
         fileText.current = text;
         setGraph(next, { fromRemote: true });
@@ -382,16 +394,14 @@ export function App() {
     try {
       const handle = await pickFileToSave(`${fileBaseName(graphRef.current)}.yaml`);
       if (!handle) return;
-      const text = textFor(graphRef.current, handle.name);
-      fileText.current = text;
-      fileModified.current = await writeHandle(handle, text);
+      await writeFileText(handle, textFor(graphRef.current, handle.name));
       setFile({ handle, status: 'saved' });
       void rememberHandle(handle);
       toast(`Saved to ${handle.name}: further changes are saved automatically`);
     } catch (err) {
       toast((err as Error).message, 'error');
     }
-  }, [toast]);
+  }, [toast, writeFileText]);
 
   /** Asks again for access to the file linked on a previous visit (needs a click). */
   const reconnectFile = useCallback(async () => {
@@ -434,17 +444,15 @@ export function App() {
       await reconnectFile();
       return;
     }
-    const text = textFor(graphRef.current, f.handle.name);
-    fileText.current = text;
     try {
-      fileModified.current = await writeHandle(f.handle, text);
+      await writeFileText(f.handle, textFor(graphRef.current, f.handle.name));
       setFile((cur) => (cur?.handle === f.handle ? { ...cur, status: 'saved' } : cur));
       toast(`Saved to ${f.handle.name}`);
     } catch (err) {
       setFile((cur) => (cur?.handle === f.handle ? { ...cur, status: 'error' } : cur));
       toast(`Could not save ${f.handle.name}: ${(err as Error).message}`, 'error');
     }
-  }, [reconnectFile, saveAs, saveToNewFile, toast]);
+  }, [reconnectFile, saveAs, saveToNewFile, toast, writeFileText]);
 
   // New graphs are unlinked first, so they never overwrite the open file.
   const newGraph = useCallback(() => {
@@ -699,12 +707,20 @@ export function App() {
           >
             <span className="dot" /> Reconnect {file.handle.name}
           </button>
+        ) : file?.status === 'error' ? (
+          <button
+            className="sync error"
+            data-tip={`The last save to ${file.handle.name} failed: click (or Ctrl+S) to try again`}
+            onClick={() => void save()}
+          >
+            <span className="dot" /> Save failed · Retry {file.handle.name}
+          </button>
         ) : file ? (
           <div
             className={`sync ${file.status}`}
             data-tip={`Changes are saved to ${file.handle.name}; edits to it from other tools (e.g. the MCP server) show up here.`}
           >
-            <span className="dot" /> {{ saved: 'Saved', saving: 'Saving…', error: 'Save failed' }[file.status]} · {file.handle.name}
+            <span className="dot" /> {{ saved: 'Saved', saving: 'Saving…' }[file.status]} · {file.handle.name}
           </div>
         ) : (
           <div

@@ -266,7 +266,8 @@ code,
 .sync.local .dot {
   background: var(--muted);
 }
-.sync.reconnect {
+.sync.reconnect,
+button.sync.error {
   border: 1px solid var(--warn);
   border-radius: 999px;
   padding: 2px 10px;
@@ -275,6 +276,9 @@ code,
   font: inherit;
   font-size: 12px;
   cursor: pointer;
+}
+button.sync.error {
+  border-color: var(--danger);
 }
 .sync.reconnect .dot {
   background: var(--warn);
