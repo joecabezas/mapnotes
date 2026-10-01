@@ -226,9 +226,16 @@ export function normalizeGraph(input: unknown): Graph {
     );
   }
 
+  const rawEdges = Array.isArray(input.edges) ? input.edges : [];
+  // Generated IDs must avoid every explicit ID, including ones that appear later.
+  const explicitEdgeIds = new Set<string>();
+  for (const raw of rawEdges) {
+    const id = isObject(raw) ? str(raw.id) : undefined;
+    if (id) explicitEdgeIds.add(id);
+  }
   const seenEdges = new Set<string>();
   let auto = 0;
-  for (const raw of Array.isArray(input.edges) ? input.edges : []) {
+  for (const raw of rawEdges) {
     if (!isObject(raw)) continue;
     const source = str(raw.source);
     const target = str(raw.target);
@@ -239,7 +246,7 @@ export function normalizeGraph(input: unknown): Graph {
     let id = str(raw.id);
     if (!id) {
       do id = `e${++auto}`;
-      while (seenEdges.has(id));
+      while (explicitEdgeIds.has(id) || seenEdges.has(id));
     }
     if (seenEdges.has(id)) throw new GraphError(`Duplicate edge id "${id}"`);
     seenEdges.add(id);
