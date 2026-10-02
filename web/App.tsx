@@ -33,6 +33,21 @@ const CANVAS_MIN_WIDTH = 320;
 const HISTORY_LIMIT = 200;
 /** Edits closer together than this collapse into a single undo step. */
 const COALESCE_MS = 600;
+/** The grid the arrow keys move the selected nodes along. */
+const NUDGE_PX = 10;
+const NUDGES: Record<string, Position> = {
+  ArrowUp: { x: 0, y: -1 },
+  ArrowDown: { x: 0, y: 1 },
+  ArrowLeft: { x: -1, y: 0 },
+  ArrowRight: { x: 1, y: 0 },
+};
+
+/** The next grid line from `v` in direction `dir` (-1, 0 or 1); off-grid values snap to the nearest line that way. */
+function nextGridLine(v: number, dir: number): number {
+  if (dir > 0) return (Math.floor(v / NUDGE_PX) + 1) * NUDGE_PX;
+  if (dir < 0) return (Math.ceil(v / NUDGE_PX) - 1) * NUDGE_PX;
+  return v;
+}
 /** How often the open file is checked for changes made by other tools (e.g. the MCP server). */
 const FILE_POLL_MS = 1000;
 /** Edits closer together than this are written to the file once. */
@@ -759,6 +774,19 @@ export function App() {
         return;
       }
       if (mod || e.altKey) return;
+      const nudge = NUDGES[e.key];
+      if (nudge) {
+        const ids = selection?.kind === 'node' ? [selection.id] : selection?.kind === 'nodes' ? selection.ids : [];
+        if (!ids.length) return;
+        e.preventDefault();
+        const moving = new Set(ids);
+        const positions: Record<string, Position> = {};
+        for (const n of graphRef.current.nodes) {
+          if (n.position && moving.has(n.id)) positions[n.id] = { x: nextGridLine(n.position.x, nudge.x), y: nextGridLine(n.position.y, nudge.y) };
+        }
+        onNodesMoved(positions, true);
+        return;
+      }
       switch (e.key) {
         case 'n':
         case 'N':
@@ -814,7 +842,7 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [addNodeInView, closeFileDrawer, connect, deleteSelection, expandSelection, fileDrawerOpen, helpOpen, hidden, hideSelection, layoutName, mcpOpen, openAction, revealHidden, redo, runLayout, save, selection, shrinkSelection, startConnect, stylesOpen, undo]);
+  }, [addNodeInView, closeFileDrawer, connect, deleteSelection, expandSelection, fileDrawerOpen, helpOpen, hidden, hideSelection, layoutName, mcpOpen, onNodesMoved, openAction, revealHidden, redo, runLayout, save, selection, shrinkSelection, startConnect, stylesOpen, undo]);
 
   return (
     <div className="app">
