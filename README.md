@@ -35,7 +35,7 @@ Every push to `master` is built and published to GitHub Pages by `.github/workfl
 | Select several | `Shift`/`Ctrl` + click, or `Shift` + drag a box on empty canvas; `Ctrl+A` selects all. Drag any selected node, or press the arrow keys, to move them together (arrows step along a 10px grid); the inspector can restyle or delete them at once |
 | Delete | `Del` / `Backspace`, or the button in the inspector |
 | Hide / show | `H` hides the selected nodes and their edges; `Shift+H` shows them all again (the status bar counts hidden nodes). Hiding only affects the view and isn't saved, but it can be undone |
-| Arrange | Drag nodes, or pick a layout from the dropdown (it applies immediately; **↻** runs it again). **Smart (layered)** puts parents above their children and minimises edge crossings; **Force-directed** spreads nodes out like springs. `F` fits the view |
+| Arrange | Drag nodes, or pick a layout from the dropdown (it applies immediately; **↻** runs it again). **Smart (layered)** puts parents above their children and minimises edge crossings; **Force-directed** spreads nodes out like springs. `F` fits the selection in view, or the whole graph if nothing is selected |
 | Styles | **🎨 Styles**: node color/border/shape/size/icon, edge color/width/line/arrow/curve |
 | Search | `/` — matches labels, ids and property values; `Enter` jumps to the first hit |
 | Undo / redo | `Ctrl+Z` / `Ctrl+Shift+Z` |

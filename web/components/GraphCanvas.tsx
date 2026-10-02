@@ -15,6 +15,7 @@ const eid = (id: string) => `e:${id}`;
 export type Selection = { kind: 'node' | 'edge'; id: string } | { kind: 'nodes'; ids: string[] } | null;
 
 export interface GraphCanvasHandle {
+  /** Fits the selection in view, or the whole visible graph when nothing is selected. */
   fit(): void;
   /**
    * Lays out the given nodes (at least two; others stay put), or the whole graph, saving the new
@@ -134,7 +135,12 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
   }
 
   useImperativeHandle(ref, () => ({
-    fit: () => cyRef.current?.animate({ fit: { eles: cyRef.current.elements(':visible'), padding: 50 }, duration: 300 }),
+    fit: () => {
+      const cy = cyRef.current;
+      if (!cy) return;
+      const selected = cy.elements(':selected');
+      cy.animate({ fit: { eles: selected.nonempty() ? selected : cy.elements(':visible'), padding: 50 }, duration: 300 });
+    },
     runLayout,
     center(sel) {
       const cy = cyRef.current;

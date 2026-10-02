@@ -16,7 +16,7 @@ const SHORTCUTS: [string, string][] = [
   ['Ctrl+Z / Ctrl+Shift+Z', 'Undo / redo'],
   ['Ctrl+S', fileAccessSupported ? 'Save to the open file (or choose a new one)' : 'Download the graph as YAML'],
   ['Ctrl+O', 'Open a YAML or JSON graph file'],
-  ['F', 'Fit the whole graph in view'],
+  ['F', 'Fit the selection in view (the whole graph if nothing is selected)'],
   ['L', 'Run the layout again (on the selected nodes only, if two or more are selected)'],
   ['/', 'Search nodes'],
   ['?', 'Show this help'],

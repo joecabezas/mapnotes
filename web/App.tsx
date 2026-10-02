@@ -938,7 +938,7 @@ export function App() {
               <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8M21 3v5h-5M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16M8 16H3v5" />
             </svg>
           </button>
-          <button className="btn ghost icon" data-tip="Fit graph to screen (F)" aria-label="Fit graph to screen" onClick={() => canvas.current?.fit()}>
+          <button className="btn ghost icon" data-tip="Fit selection, or the whole graph, to screen (F)" aria-label="Fit selection or graph to screen" onClick={() => canvas.current?.fit()}>
             <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" />
             </svg>
