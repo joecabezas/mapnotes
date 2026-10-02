@@ -61,12 +61,17 @@ interface Issues {
   source: string;
   list: string[];
 }
-interface History {
+/** One undo step: the graph, and which of its nodes are hidden (H). */
+interface Snapshot {
   graph: Graph;
-  past: Graph[];
-  future: Graph[];
+  hidden: string[];
+}
+interface History extends Snapshot {
+  past: Snapshot[];
+  future: Snapshot[];
   lastAt: number;
 }
+const snapshot = (h: History): Snapshot => ({ graph: h.graph, hidden: h.hidden });
 
 function storageGet(key: string): string | null {
   try {
@@ -127,7 +132,7 @@ function isTyping(e: KeyboardEvent) {
 }
 
 export function App() {
-  const [hist, setHist] = useState<History>({ graph: emptyGraph(), past: [], future: [], lastAt: 0 });
+  const [hist, setHist] = useState<History>({ graph: emptyGraph(), hidden: [], past: [], future: [], lastAt: 0 });
   const graph = hist.graph;
   const graphRef = useRef(graph);
   graphRef.current = graph;
@@ -137,8 +142,11 @@ export function App() {
   const fileRef = useRef(file);
   fileRef.current = file;
   const [selection, setSelection] = useState<Selection>(null);
-  /** Nodes hidden from view (H / Shift+H). View state only: not saved with the graph. */
-  const [hidden, setHidden] = useState<string[]>([]);
+  /** Nodes hidden from view (H / Shift+H). View state only: not saved with the graph, but undoable. */
+  const hidden = useMemo(() => {
+    const exists = new Set(graph.nodes.map((n) => n.id));
+    return hist.hidden.filter((id) => exists.has(id));
+  }, [graph.nodes, hist.hidden]);
   const [connect, setConnect] = useState<{ source: string | null } | null>(null);
   const [theme, setTheme] = useState<ThemeName>(() => (storageGet(THEME_KEY) === 'light' ? 'light' : 'dark'));
   const [stylesOpen, setStylesOpen] = useState(false);
@@ -186,8 +194,8 @@ export function App() {
       if (!record) return { ...h, graph: next };
       const now = Date.now();
       const coalesce = !fromRemote && now - h.lastAt < COALESCE_MS && h.past.length > 0;
-      const past = coalesce ? h.past : [...h.past, h.graph].slice(-HISTORY_LIMIT);
-      return { graph: next, past, future: [], lastAt: fromRemote ? 0 : now };
+      const past = coalesce ? h.past : [...h.past, snapshot(h)].slice(-HISTORY_LIMIT);
+      return { graph: next, hidden: h.hidden, past, future: [], lastAt: fromRemote ? 0 : now };
     });
   }, []);
 
@@ -207,19 +215,18 @@ export function App() {
 
   const undo = useCallback(() => {
     setHist((h) =>
-      h.past.length ? { graph: h.past[h.past.length - 1], past: h.past.slice(0, -1), future: [h.graph, ...h.future], lastAt: 0 } : h,
+      h.past.length ? { ...h.past[h.past.length - 1], past: h.past.slice(0, -1), future: [snapshot(h), ...h.future], lastAt: 0 } : h,
     );
   }, []);
   const redo = useCallback(() => {
-    setHist((h) => (h.future.length ? { graph: h.future[0], past: [...h.past, h.graph], future: h.future.slice(1), lastAt: 0 } : h));
+    setHist((h) => (h.future.length ? { ...h.future[0], past: [...h.past, snapshot(h)], future: h.future.slice(1), lastAt: 0 } : h));
   }, []);
 
   /** Replaces the graph and clears undo history, without writing it back to the file. */
   const resetGraph = useCallback((next: Graph) => {
     skipSave.current = true;
     graphRef.current = next;
-    setHist({ graph: next, past: [], future: [], lastAt: 0 });
-    setHidden([]);
+    setHist({ graph: next, hidden: [], past: [], future: [], lastAt: 0 });
   }, []);
 
   /** Reads the linked file into the canvas. `fresh` (a newly opened file) also clears undo history. */
@@ -452,24 +459,35 @@ export function App() {
   }, [graph.nodes, lastExpansion]);
 
   // ---- Hide / reveal nodes (H / Shift+H), like Blender. A hidden node's edges are hidden with it.
-  // Forget hidden nodes that no longer exist, so an undone delete doesn't bring them back hidden.
-  useEffect(() => {
-    const exists = new Set(graph.nodes.map((n) => n.id));
-    setHidden((h) => (h.every((id) => exists.has(id)) ? h : h.filter((id) => exists.has(id))));
-  }, [graph.nodes]);
+  // Each change is its own undo step.
+  const setHidden = useCallback((next: string[]) => {
+    setHist((h) => ({ ...h, hidden: next, past: [...h.past, snapshot(h)].slice(-HISTORY_LIMIT), future: [], lastAt: 0 }));
+  }, []);
 
   const hideSelection = useCallback(() => {
     if (!selectedNodeIds.length) return;
-    setHidden((h) => [...new Set([...h, ...selectedNodeIds])]);
+    setHidden([...new Set([...hidden, ...selectedNodeIds])]);
     setSelection(null);
-  }, [selectedNodeIds]);
+  }, [hidden, selectedNodeIds, setHidden]);
+
+  // Hidden nodes (and their edges) can't stay selected, e.g. after undoing a reveal.
+  useEffect(() => {
+    const isHidden = new Set(hidden);
+    if (!isHidden.size || !selection) return;
+    if (selection.kind === 'edge') {
+      const edge = graph.edges.find((e) => e.id === selection.id);
+      if (edge && (isHidden.has(edge.source) || isHidden.has(edge.target))) setSelection(null);
+    } else if (selectedNodeIds.some((id) => isHidden.has(id))) {
+      setSelection(nodeSelection(selectedNodeIds.filter((id) => !isHidden.has(id))));
+    }
+  }, [graph.edges, hidden, selectedNodeIds, selection]);
 
   /** Shows every hidden node again, selecting them. */
   const revealHidden = useCallback(() => {
     if (!hidden.length) return;
     setSelection(nodeSelection(hidden));
     setHidden([]);
-  }, [hidden]);
+  }, [hidden, setHidden]);
 
   const startConnect = useCallback((source: string | null = null) => {
     setConnect({ source });
@@ -632,7 +650,13 @@ export function App() {
         const mine = graphRef.current;
         const mineText = textFor(mine, handle.name);
         await writeFileText(handle, mineText);
-        setHist((h) => ({ graph: mine, past: [...h.past, theirs].slice(-HISTORY_LIMIT), future: [], lastAt: 0 }));
+        setHist((h) => ({
+          graph: mine,
+          hidden: h.hidden,
+          past: [...h.past, { graph: theirs, hidden: h.hidden }].slice(-HISTORY_LIMIT),
+          future: [],
+          lastAt: 0,
+        }));
         setFile((cur) => (cur?.handle === handle ? { ...cur, status: 'saved' } : cur));
         toast(`Saved your version to ${handle.name}; Ctrl+Z brings back the file's version`);
       } catch (err) {
