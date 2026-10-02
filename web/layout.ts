@@ -149,7 +149,8 @@ function centreOf(positions: Record<string, Position>, extents: Record<string, E
 /**
  * Lays out `nodes` (all of `cy`'s nodes, or just some) without touching the canvas, and returns where
  * they should go. Only edges between the given nodes shape the layout; nodes left out stay where they
- * are, and a partial layout is centred where the nodes were. Quality is measured over the whole graph.
+ * are, and a partial layout is centred where the nodes were. Quality is measured over the whole visible
+ * graph; hidden nodes and their edges are ignored.
  */
 export async function computeLayout(cy: Core, nodes: NodeCollection, name: LayoutName): Promise<LayoutResult> {
   const candidates: Algorithm[] = name === 'auto' ? AUTO_CANDIDATES : [name];
@@ -158,21 +159,22 @@ export async function computeLayout(cy: Core, nodes: NodeCollection, name: Layou
   // What's visible of each node, measured on the real canvas (labels can be much wider than nodes).
   const extents: Record<string, Extent> = {};
   const current: Record<string, Position> = {};
-  cy.nodes().forEach((n) => {
+  // Hidden nodes (and their edges) are left out: they neither move nor count towards the quality.
+  cy.nodes(':visible').forEach((n) => {
     const id = n.data('refId') as string;
     const p = n.position();
     const bb = n.boundingBox({ includeLabels: true, includeOverlays: false });
     current[id] = { x: p.x, y: p.y };
     extents[id] = { left: p.x - bb.x1, right: bb.x2 - p.x, top: p.y - bb.y1, bottom: bb.y2 - p.y };
   });
-  const allEdges: QualityEdge[] = cy.edges().map((e) => ({
+  const allEdges: QualityEdge[] = cy.edges(':visible').map((e) => ({
     source: e.source().data('refId') as string,
     target: e.target().data('refId') as string,
   }));
 
   // A headless copy where each node is a plain box the size of node + label, centred on that box.
   // It keeps the canvas's element ids (`n:` / `e:` prefixed), so nodes and edges can't clash.
-  const ids = new Set(nodes.map((n) => n.data('refId') as string));
+  const ids = new Set(nodes.filter((n) => n.visible()).map((n) => n.data('refId') as string));
   const boxCentre = (id: string) => {
     const e = extents[id];
     return { x: current[id].x + (e.right - e.left) / 2, y: current[id].y + (e.bottom - e.top) / 2 };
@@ -188,7 +190,7 @@ export async function computeLayout(cy: Core, nodes: NodeCollection, name: Layou
         position: boxCentre(id),
       })),
       ...cy
-        .edges()
+        .edges(':visible')
         .filter((e) => ids.has(e.source().data('refId')) && ids.has(e.target().data('refId')))
         .map((e) => ({
           group: 'edges' as const,

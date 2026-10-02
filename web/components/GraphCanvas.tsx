@@ -109,10 +109,12 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
 
   async function runLayout(name: LayoutName, ids?: string[]): Promise<LayoutResult | null> {
     const cy = cyRef.current;
-    if (!cy || cy.nodes().empty()) return null;
+    // Hidden nodes stay where they are.
+    const visible = cy?.nodes(':visible');
+    if (!cy || !visible?.nonempty()) return null;
     const wanted = new Set(ids);
-    const subset = wanted.size >= 2 ? cy.nodes().filter((n) => wanted.has(n.data('refId'))) : null;
-    const nodes = subset ?? cy.nodes();
+    const subset = wanted.size >= 2 ? visible.filter((n) => wanted.has(n.data('refId'))) : null;
+    const nodes = subset ?? visible;
     const run = ++layoutRun.current;
     const result = await computeLayout(cy, nodes, name);
     if (run !== layoutRun.current || cy.destroyed()) return null;
