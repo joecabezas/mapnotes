@@ -41,6 +41,40 @@ Every push to `master` is built and published to GitHub Pages by `.github/workfl
 | Open / save | `Ctrl+O` / `Ctrl+S` (saves to the open file; **Download** in Firefox/Safari); Save as, JSON and PNG in the ▾ menu |
 | Help | `?` |
 
+### Filters and saved views
+
+Use **Filters & views** to filter the canvas by entity type, node style/status,
+text, exact properties, proximity to a node, and relationship labels. Values
+within a type/style list are alternatives; different filter groups and property
+conditions must all match. **None** shows no matches, while **All** removes that
+restriction. Entity types come from a node's `type` property, falling back to its
+style (PR styles are grouped as `pr`). Proximity follows edges in either direction.
+
+Click **Apply filters** for a temporary filter or enter a name and click
+**Save new view**. Switch views using the **Saved view** dropdown; **All nodes**
+restores the full graph. Reopen the dialog to update, rename or delete the
+selected view. Each saved view keeps its own node positions, including drag and
+layout changes. Node/edge/property edits affect the same underlying graph.
+Selection, search and layout operate on visible nodes; saving or downloading
+YAML/JSON always retains the full graph. PNG exports the visible canvas.
+
+Views are saved under the optional top-level `views` field in the graph file and
+in the browser copy. They are live filter definitions, so newly matching nodes
+appear without regenerating files. Existing files without views still work.
+Use this local version of the MCP server when editing files with saved views;
+older versions do not preserve the new field.
+
+```yaml
+views:
+  - id: people-prs
+    name: People & PRs
+    filters:
+      types: [person, pr]
+      edgeLabels: [authors, approved, requested changes]
+    positions:
+      person-Yan: { x: 0, y: 0 }
+```
+
 ### Icons
 
 Node styles can show an icon inside the node, from two open icon sets. Both are fetched at runtime from jsDelivr, so nothing is stored in this repo. The canvas needs network access to show them; if an icon can't be loaded, the node is simply drawn without it.

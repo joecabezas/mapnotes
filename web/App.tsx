@@ -22,6 +22,9 @@ import { writeFileText as writeTracked, writeFileTextIfUnchanged as writeTracked
 import type { ThemeName } from './theme';
 import logoUrl from './logo.svg';
 import { Icon } from './components/Icon';
+import { ViewsDialog } from './components/ViewsDialog';
+import { filterGraph, moveNodes, type ViewFilters } from '../shared/views';
+import { uniqueId } from '../shared/model';
 
 const LOCAL_KEY = 'mapnotes:graph';
 const THEME_KEY = 'mapnotes:theme';
@@ -91,7 +94,7 @@ function storageRemove(key: string) {
 }
 
 function isEmptyGraph(g: Graph): boolean {
-  return !g.nodes.length && !g.edges.length && !g.styles.length && !g.properties.length;
+  return !g.nodes.length && !g.edges.length && !g.styles.length && !g.properties.length && !g.views?.length;
 }
 
 function download(name: string, href: string) {
@@ -109,7 +112,12 @@ function downloadText(name: string, text: string, type: string) {
 
 function fileBaseName(graph: Graph): string {
   const title = graph.properties.find((p) => p.key === 'title')?.value ?? 'graph';
-  return title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'graph';
+  return (
+    title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '') || 'graph'
+  );
 }
 
 /** Graph text in the format implied by the file's extension (.json or YAML). */
@@ -145,6 +153,19 @@ export function App() {
   const [mcpOpen, setMcpOpen] = useState(false);
   const [fileDrawerOpen, setFileDrawerOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [viewsOpen, setViewsOpen] = useState(false);
+  const [activeViewId, setActiveViewId] = useState('');
+  const [customFilters, setCustomFilters] = useState<ViewFilters | null>(null);
+  const [customPositions, setCustomPositions] = useState<Record<string, Position>>({});
+  const activeView = graph.views?.find((view) => view.id === activeViewId);
+  const viewFilters = customFilters ?? activeView?.filters ?? {};
+  const visibleGraph = useMemo(
+    () => filterGraph(graph, viewFilters, customFilters ? customPositions : activeView?.positions),
+    [graph, customFilters, customPositions, activeView],
+  );
+  const visibleRef = useRef(visibleGraph);
+  visibleRef.current = visibleGraph;
+
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [issues, setIssues] = useState<Issues | null>(null);
   const [layoutName, setLayoutName] = useState<LayoutName>('auto');
@@ -205,17 +226,23 @@ export function App() {
 
   const undo = useCallback(() => {
     setHist((h) =>
-      h.past.length ? { graph: h.past[h.past.length - 1], past: h.past.slice(0, -1), future: [h.graph, ...h.future], lastAt: 0 } : h,
+      h.past.length
+        ? { graph: h.past[h.past.length - 1], past: h.past.slice(0, -1), future: [h.graph, ...h.future], lastAt: 0 }
+        : h,
     );
   }, []);
   const redo = useCallback(() => {
-    setHist((h) => (h.future.length ? { graph: h.future[0], past: [...h.past, h.graph], future: h.future.slice(1), lastAt: 0 } : h));
+    setHist((h) =>
+      h.future.length ? { graph: h.future[0], past: [...h.past, h.graph], future: h.future.slice(1), lastAt: 0 } : h,
+    );
   }, []);
 
   /** Replaces the graph and clears undo history, without writing it back to the file. */
   const resetGraph = useCallback((next: Graph) => {
     skipSave.current = true;
     graphRef.current = next;
+    setActiveViewId('');
+    setCustomFilters(null);
     setHist({ graph: next, past: [], future: [], lastAt: 0 });
   }, []);
 
@@ -285,7 +312,8 @@ export function App() {
     }
     const status = fileRef.current?.status;
     // In conflict, edits stay in the browser until the user resolves it.
-    const handle = status === 'reconnect' || status === 'paused' || status === 'conflict' ? null : fileRef.current?.handle;
+    const handle =
+      status === 'reconnect' || status === 'paused' || status === 'conflict' ? null : fileRef.current?.handle;
     if (!handle) return;
     const text = textFor(graph, handle.name);
     if (text === fileText.current) {
@@ -384,11 +412,66 @@ export function App() {
     [selection],
   );
   const sameIds = (a: string[], b: string[]) => a.length === b.length && a.every((id) => b.includes(id));
-  const lastExpansion = expansions.length && sameIds(expansions[expansions.length - 1].after, selectedNodeIds)
-    ? expansions[expansions.length - 1]
-    : null;
+  const lastExpansion =
+    expansions.length && sameIds(expansions[expansions.length - 1].after, selectedNodeIds)
+      ? expansions[expansions.length - 1]
+      : null;
   const nodeSelection = (ids: string[]): Selection =>
     ids.length === 0 ? null : ids.length === 1 ? { kind: 'node', id: ids[0] } : { kind: 'nodes', ids };
+
+  useEffect(() => {
+    const ids = new Set(visibleGraph.nodes.map((n) => n.id));
+    setSelection((current) => {
+      if (!current) return current;
+      if (current.kind === 'node') return ids.has(current.id) ? current : null;
+      if (current.kind === 'edge') return visibleGraph.edges.some((e) => e.id === current.id) ? current : null;
+      if (current.kind !== 'nodes') return current;
+      const kept = current.ids.filter((id) => ids.has(id));
+      return kept.length === current.ids.length ? current : nodeSelection(kept);
+    });
+    setConnect((current) => (current?.source && !ids.has(current.source) ? null : current));
+  }, [visibleGraph]);
+
+  useEffect(() => {
+    if (activeViewId && !activeView) setActiveViewId('');
+  }, [activeView, activeViewId]);
+
+  const chooseView = (id: string) => {
+    setActiveViewId(id);
+    setCustomFilters(null);
+    setCustomPositions({});
+    setSelection(null);
+    setConnect(null);
+    setExpansions([]);
+    requestAnimationFrame(() => canvas.current?.fit());
+  };
+
+  const saveView = (name: string, filters: ViewFilters, replace: boolean) => {
+    const id =
+      replace && activeView
+        ? activeView.id
+        : uniqueId(
+            'view',
+            (graph.views ?? []).map((v) => v.id),
+          );
+    const positions = {
+      ...activeView?.positions,
+      ...Object.fromEntries(visibleGraph.nodes.filter((n) => n.position).map((n) => [n.id, n.position!])),
+    };
+    if (
+      !apply((g) => ({
+        ...g,
+        views: [
+          ...(g.views ?? []).filter((v) => v.id !== id),
+          { id, name, filters: structuredClone(filters), positions },
+        ],
+      }))
+    )
+      return;
+    chooseView(id);
+    setViewsOpen(false);
+    toast(`Saved view “${name}”`);
+  };
 
   // ---- Automatic layout: of the selected nodes when there are several, otherwise of the whole graph.
   const layoutScope = selectedNodeIds.length >= 2 ? selectedNodeIds : null;
@@ -421,17 +504,17 @@ export function App() {
 
   const canExpand = useMemo(() => {
     const sel = new Set(selectedNodeIds);
-    return graph.edges.some((e) => sel.has(e.source) && !sel.has(e.target));
-  }, [graph.edges, selectedNodeIds]);
+    return visibleGraph.edges.some((e) => sel.has(e.source) && !sel.has(e.target));
+  }, [visibleGraph.edges, selectedNodeIds]);
 
   const expandSelection = useCallback(() => {
     const sel = new Set(selectedNodeIds);
-    const added = graph.edges.filter((e) => sel.has(e.source) && !sel.has(e.target)).map((e) => e.target);
+    const added = visibleGraph.edges.filter((e) => sel.has(e.source) && !sel.has(e.target)).map((e) => e.target);
     if (!added.length) return;
     const after = [...selectedNodeIds, ...new Set(added)];
     setExpansions((stack) => [...(lastExpansion ? stack : []), { before: selection, after }]);
     setSelection(nodeSelection(after));
-  }, [graph.edges, lastExpansion, selectedNodeIds, selection]);
+  }, [visibleGraph.edges, lastExpansion, selectedNodeIds, selection]);
 
   const shrinkSelection = useCallback(() => {
     if (!lastExpansion) return;
@@ -447,10 +530,13 @@ export function App() {
     );
   }, [graph.nodes, lastExpansion]);
 
-  const startConnect = useCallback((source: string | null = null) => {
-    setConnect({ source });
-    toast(source ? 'Click the target node' : 'Click the source node, then the target node');
-  }, [toast]);
+  const startConnect = useCallback(
+    (source: string | null = null) => {
+      setConnect({ source });
+      toast(source ? 'Click the target node' : 'Click the source node, then the target node');
+    },
+    [toast],
+  );
 
   const onConnectTap = useCallback(
     (id: string) => {
@@ -543,19 +629,20 @@ export function App() {
     }
   }, [loadFromFile, toast]);
 
-  const saveAs = useCallback(
-    (format: 'yaml' | 'json' | 'png') => {
-      const base = fileBaseName(graphRef.current);
-      if (format === 'png') {
-        const png = canvas.current?.exportPng();
-        if (png) download(`${base}.png`, png);
-        return;
-      }
-      const text = serializeGraph(graphRef.current, format);
-      downloadText(`${base}.${format === 'yaml' ? 'yaml' : 'json'}`, text, format === 'yaml' ? 'text/yaml' : 'application/json');
-    },
-    [],
-  );
+  const saveAs = useCallback((format: 'yaml' | 'json' | 'png') => {
+    const base = fileBaseName(graphRef.current);
+    if (format === 'png') {
+      const png = canvas.current?.exportPng();
+      if (png) download(`${base}.png`, png);
+      return;
+    }
+    const text = serializeGraph(graphRef.current, format);
+    downloadText(
+      `${base}.${format === 'yaml' ? 'yaml' : 'json'}`,
+      text,
+      format === 'yaml' ? 'text/yaml' : 'application/json',
+    );
+  }, []);
 
   /** Ctrl+S: write the linked file now, or pick a file to save to (download where unsupported). */
   const save = useCallback(async () => {
@@ -651,19 +738,20 @@ export function App() {
 
   const onNodesMoved = useCallback(
     (positions: Record<string, Position>, record: boolean) => {
-      apply(
-        (g) => ({ ...g, nodes: g.nodes.map((n) => (positions[n.id] ? { ...n, position: positions[n.id] } : n)) }),
-        record,
-      );
+      if (customFilters) {
+        setCustomPositions((previous) => ({ ...previous, ...positions }));
+        return;
+      }
+      apply((g) => moveNodes(g, positions, activeView?.id), record);
     },
-    [apply],
+    [apply, activeView?.id, customFilters],
   );
 
   // ---- Search.
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return null;
-    return graph.nodes
+    return visibleGraph.nodes
       .filter(
         (n) =>
           n.label.toLowerCase().includes(q) ||
@@ -671,7 +759,7 @@ export function App() {
           n.properties.some((p) => p.value.toLowerCase().includes(q) || p.key.toLowerCase().includes(q)),
       )
       .map((n) => n.id);
-  }, [graph.nodes, query]);
+  }, [visibleGraph.nodes, query]);
 
   // ---- Keyboard shortcuts.
   useEffect(() => {
@@ -691,6 +779,10 @@ export function App() {
         if (e.key === 'Escape') closeFileDrawer();
         return;
       }
+      if (viewsOpen) {
+        if (e.key === 'Escape') setViewsOpen(false);
+        return;
+      }
       if (isTyping(e)) return;
       if (mod && e.key.toLowerCase() === 'z') {
         e.preventDefault();
@@ -705,7 +797,7 @@ export function App() {
       }
       if (mod && e.key.toLowerCase() === 'a') {
         e.preventDefault();
-        const ids = graphRef.current.nodes.map((n) => n.id);
+        const ids = visibleRef.current.nodes.map((n) => n.id);
         setSelection(ids.length ? { kind: 'nodes', ids } : null);
         return;
       }
@@ -759,7 +851,27 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [addNodeInView, closeFileDrawer, connect, deleteSelection, expandSelection, fileDrawerOpen, helpOpen, layoutName, mcpOpen, openAction, redo, runLayout, save, selection, shrinkSelection, startConnect, stylesOpen, undo]);
+  }, [
+    addNodeInView,
+    closeFileDrawer,
+    connect,
+    deleteSelection,
+    expandSelection,
+    fileDrawerOpen,
+    helpOpen,
+    layoutName,
+    mcpOpen,
+    openAction,
+    redo,
+    runLayout,
+    save,
+    selection,
+    shrinkSelection,
+    startConnect,
+    stylesOpen,
+    undo,
+    viewsOpen,
+  ]);
 
   return (
     <div className="app">
@@ -772,33 +884,57 @@ export function App() {
           aria-controls="file-drawer"
           onClick={() => setFileDrawerOpen(true)}
         >
-          <span aria-hidden="true"><i /><i /><i /></span>
+          <span aria-hidden="true">
+            <i />
+            <i />
+            <i />
+          </span>
         </button>
         <div className="brand" data-tip="MapNotes: a render engine for your graphs">
           <img className="logo" src={logoUrl} alt="" aria-hidden="true" /> <span className="brand-name">MapNotes</span>
         </div>
 
         <div className="toolbar-actions">
-          <button className="btn ghost icon" data-tip="Undo (Ctrl+Z)" aria-label="Undo" disabled={!hist.past.length} onClick={undo}>
+          <button
+            className="btn ghost icon"
+            data-tip="Undo (Ctrl+Z)"
+            aria-label="Undo"
+            disabled={!hist.past.length}
+            onClick={undo}
+          >
             <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M9 14 4 9l5-5" />
               <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
             </svg>
           </button>
-          <button className="btn ghost icon" data-tip="Redo (Ctrl+Shift+Z)" aria-label="Redo" disabled={!hist.future.length} onClick={redo}>
+          <button
+            className="btn ghost icon"
+            data-tip="Redo (Ctrl+Shift+Z)"
+            aria-label="Redo"
+            disabled={!hist.future.length}
+            onClick={redo}
+          >
             <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="m15 14 5-5-5-5" />
               <path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" />
             </svg>
           </button>
-          <button className="btn primary compact-action" data-tip="Add a node (N) — or double-click the canvas" aria-label="Add node" onClick={addNodeInView}>
-            <Icon name="plus" /><span className="action-label">Node</span>
+          <button
+            className="btn primary compact-action"
+            data-tip="Add a node (N) — or double-click the canvas"
+            aria-label="Add node"
+            onClick={addNodeInView}
+          >
+            <Icon name="plus" />
+            <span className="action-label">Node</span>
           </button>
           <button
             className={`btn compact-action${connect ? ' active' : ''}`}
             data-tip="Connect two nodes with an edge (E): click the source, then the target"
             aria-label="Connect nodes"
-            onClick={() => (connect ? setConnect(null) : startConnect(selection?.kind === 'node' ? selection.id : null))}
+            onClick={() =>
+              connect ? setConnect(null) : startConnect(selection?.kind === 'node' ? selection.id : null)
+            }
           >
             <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <circle cx="19" cy="5" r="2" />
@@ -834,7 +970,11 @@ export function App() {
         <div className="toolbar-view">
           <select
             value={layoutName}
-            data-tip={layoutScope ? `Automatic layout for the ${layoutScope.length} selected nodes` : 'Automatic layout for the whole graph (select nodes to lay out just those)'}
+            data-tip={
+              layoutScope
+                ? `Automatic layout for the ${layoutScope.length} selected nodes`
+                : 'Automatic layout for the whole graph (select nodes to lay out just those)'
+            }
             aria-label="Layout algorithm"
             onChange={(e) => {
               const name = e.target.value as LayoutName;
@@ -842,12 +982,20 @@ export function App() {
               void runLayout(name);
             }}
           >
-            {LAYOUTS.map((l) => <option key={l.name} value={l.name}>{l.label}</option>)}
+            {LAYOUTS.map((l) => (
+              <option key={l.name} value={l.name}>
+                {l.label}
+              </option>
+            ))}
           </select>
           <button
             className={`btn ghost icon${layoutScope ? ' scoped' : ''}${layoutsRunning ? ' busy' : ''}`}
             disabled={layoutsRunning > 0}
-            data-tip={layoutScope ? `Run the layout on the ${layoutScope.length} selected nodes (L)` : 'Run the layout on the whole graph (L)'}
+            data-tip={
+              layoutScope
+                ? `Run the layout on the ${layoutScope.length} selected nodes (L)`
+                : 'Run the layout on the whole graph (L)'
+            }
             aria-label={layoutScope ? 'Run layout on selected nodes' : 'Run layout again'}
             onClick={() => void runLayout(layoutName)}
           >
@@ -855,12 +1003,24 @@ export function App() {
               <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8M21 3v5h-5M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16M8 16H3v5" />
             </svg>
           </button>
-          <button className="btn ghost icon" data-tip="Fit graph to screen (F)" aria-label="Fit graph to screen" onClick={() => canvas.current?.fit()}>
+          <button
+            className="btn ghost icon"
+            data-tip="Fit graph to screen (F)"
+            aria-label="Fit graph to screen"
+            onClick={() => canvas.current?.fit()}
+          >
             <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" />
             </svg>
           </button>
-          <button className="btn ghost" data-tip="Colors, shapes, sizes and line styles" onClick={() => { setStylesInitialId(undefined); setStylesOpen(true); }}>
+          <button
+            className="btn ghost"
+            data-tip="Colors, shapes, sizes and line styles"
+            onClick={() => {
+              setStylesInitialId(undefined);
+              setStylesOpen(true);
+            }}
+          >
             <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z" />
               <circle cx="13.5" cy="6.5" r=".5" />
@@ -896,7 +1056,11 @@ export function App() {
           </div>
 
           <div className="toolbar-utilities">
-            <button className="btn ghost" data-tip="Let an AI assistant edit your graphs" onClick={() => setMcpOpen(true)}>
+            <button
+              className="btn ghost"
+              data-tip="Let an AI assistant edit your graphs"
+              onClick={() => setMcpOpen(true)}
+            >
               Install MCP
             </button>
             <button
@@ -907,7 +1071,12 @@ export function App() {
             >
               <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
             </button>
-            <button className="btn ghost icon" data-tip="Help & shortcuts (?)" aria-label="Help" onClick={() => setHelpOpen(true)}>
+            <button
+              className="btn ghost icon"
+              data-tip="Help & shortcuts (?)"
+              aria-label="Help"
+              onClick={() => setHelpOpen(true)}
+            >
               <Icon name="help" />
             </button>
             <a
@@ -936,9 +1105,34 @@ export function App() {
             e.target.value = '';
           }}
         />
+        <div className="saved-view-bar">
+          <select
+            aria-label="Saved view"
+            value={customFilters ? '__custom__' : (activeView?.id ?? '')}
+            onChange={(e) => chooseView(e.target.value)}
+          >
+            <option value="">All nodes</option>
+            {customFilters && <option value="__custom__">Custom filters</option>}
+            {(graph.views ?? []).map((view) => (
+              <option key={view.id} value={view.id}>
+                {view.name}
+              </option>
+            ))}
+          </select>
+          <button className="btn ghost" onClick={() => setViewsOpen(true)}>
+            Filters & views
+          </button>
+          <span className="view-count" aria-label="Visible nodes">
+            {visibleGraph.nodes.length}/{graph.nodes.length}
+          </span>
+        </div>
       </header>
 
-      <div className={`drawer-layer${fileDrawerOpen ? ' open' : ''}`} inert={!fileDrawerOpen} aria-hidden={!fileDrawerOpen}>
+      <div
+        className={`drawer-layer${fileDrawerOpen ? ' open' : ''}`}
+        inert={!fileDrawerOpen}
+        aria-hidden={!fileDrawerOpen}
+      >
         <div className="drawer-backdrop" onClick={closeFileDrawer} />
         <aside
           id="file-drawer"
@@ -961,7 +1155,12 @@ export function App() {
         >
           <div className="file-drawer-head">
             <strong>File & actions</strong>
-            <button ref={drawerCloseButton} className="btn ghost icon" aria-label="Close menu" onClick={closeFileDrawer}>
+            <button
+              ref={drawerCloseButton}
+              className="btn ghost icon"
+              aria-label="Close menu"
+              onClick={closeFileDrawer}
+            >
               <Icon name="close" />
             </button>
           </div>
@@ -969,28 +1168,42 @@ export function App() {
             <div className="drawer-section-title">Graph</div>
             <button onClick={() => runDrawerAction(newGraph)}>New graph</button>
             <button onClick={() => runDrawerAction(() => void openAction())}>Open file…</button>
-            <button onClick={() => runDrawerAction(() => void save())}>{fileAccessSupported ? 'Save' : 'Download YAML'}</button>
-            {fileAccessSupported && <button onClick={() => runDrawerAction(() => void saveToNewFile())}>Save as…</button>}
+            <button onClick={() => runDrawerAction(() => void save())}>
+              {fileAccessSupported ? 'Save' : 'Download YAML'}
+            </button>
+            {fileAccessSupported && (
+              <button onClick={() => runDrawerAction(() => void saveToNewFile())}>Save as…</button>
+            )}
             {file && <button onClick={() => runDrawerAction(closeFile)}>Close file (keep in browser)</button>}
 
             <div className="drawer-section-title">Export</div>
-            {fileAccessSupported && <button onClick={() => runDrawerAction(() => saveAs('yaml'))}>Download YAML</button>}
+            {fileAccessSupported && (
+              <button onClick={() => runDrawerAction(() => saveAs('yaml'))}>Download YAML</button>
+            )}
             <button onClick={() => runDrawerAction(() => saveAs('json'))}>Download JSON</button>
             <button onClick={() => runDrawerAction(() => saveAs('png'))}>Export PNG image</button>
 
             <div className="drawer-section-title">Edit</div>
-            <button disabled={!selection} onClick={() => runDrawerAction(deleteSelection)}>Delete selection</button>
+            <button disabled={!selection} onClick={() => runDrawerAction(deleteSelection)}>
+              Delete selection
+            </button>
             {!file && !isEmptyGraph(graph) && (
-              <button className="drawer-danger" onClick={() => runDrawerAction(deleteBrowserCopy)}>Delete browser copy</button>
+              <button className="drawer-danger" onClick={() => runDrawerAction(deleteBrowserCopy)}>
+                Delete browser copy
+              </button>
             )}
           </div>
         </aside>
       </div>
 
-      <main className="main" style={{ '--inspector-width': `${Math.min(panelWidth, panelMax)}px` } as React.CSSProperties}>
+      <main
+        className="main"
+        style={{ '--inspector-width': `${Math.min(panelWidth, panelMax)}px` } as React.CSSProperties}
+      >
         <GraphCanvas
+          key={(activeView?.id ?? 'all') + JSON.stringify(viewFilters)}
           ref={canvas}
-          graph={graph}
+          graph={visibleGraph}
           theme={theme}
           selection={selection}
           connecting={connect !== null}
@@ -1024,8 +1237,10 @@ export function App() {
               className={`sync ${file.status}`}
               data-tip={`Changes are saved to ${file.handle.name}; edits to it from other tools (e.g. the MCP server) show up here.`}
             >
-              <span className="dot" /> <span className="sync-label">
-                {{ saved: 'Saved', saving: 'Saving…', paused: 'Not saving', conflict: 'Conflict' }[file.status]} · {file.handle.name}
+              <span className="dot" />{' '}
+              <span className="sync-label">
+                {{ saved: 'Saved', saving: 'Saving…', paused: 'Not saving', conflict: 'Conflict' }[file.status]} ·{' '}
+                {file.handle.name}
               </span>
             </div>
           ) : (
@@ -1034,7 +1249,7 @@ export function App() {
               data-tip={
                 fileAccessSupported
                   ? "Not linked to a file: the graph is kept in this browser's local storage. Open a file, or Save to create one."
-                  : "This browser cannot edit files on disk: the graph is kept in its local storage. Use Download to save a copy."
+                  : 'This browser cannot edit files on disk: the graph is kept in its local storage. Use Download to save a copy.'
               }
             >
               <span className="dot" /> <span className="sync-label">Browser storage</span>
@@ -1046,8 +1261,8 @@ export function App() {
           <div className="banner">
             {connect.source ? (
               <>
-                Connecting from <b>{graph.nodes.find((n) => n.id === connect.source)?.label ?? connect.source}</b> — click the
-                target node
+                Connecting from <b>{graph.nodes.find((n) => n.id === connect.source)?.label ?? connect.source}</b> —
+                click the target node
               </>
             ) : (
               <>Click the source node</>
@@ -1074,10 +1289,18 @@ export function App() {
             <div className="row">
               {file?.status === 'paused' ? (
                 <>
-                  <button className="btn small" data-tip="Overwrite the file without the invalid entries" onClick={() => void save()}>
+                  <button
+                    className="btn small"
+                    data-tip="Overwrite the file without the invalid entries"
+                    onClick={() => void save()}
+                  >
                     Save without them
                   </button>
-                  <button className="btn small ghost" data-tip="Stop saving to the file; fix it in an editor and open it again" onClick={closeFile}>
+                  <button
+                    className="btn small ghost"
+                    data-tip="Stop saving to the file; fix it in an editor and open it again"
+                    onClick={closeFile}
+                  >
                     Close file
                   </button>
                 </>
@@ -1119,6 +1342,18 @@ export function App() {
           </div>
         )}
 
+        {loaded && graph.nodes.length > 0 && visibleGraph.nodes.length === 0 && (
+          <div className="empty">
+            <h2>No nodes match this view</h2>
+            <p>Change the filters or return to the full graph.</p>
+            <button className="btn" onClick={() => setViewsOpen(true)}>
+              Edit filters
+            </button>
+            <button className="btn" onClick={() => chooseView('')}>
+              Show all nodes
+            </button>
+          </div>
+        )}
         {loaded && graph.nodes.length === 0 && (
           <div className="empty">
             <h2>Your graph is empty</h2>
@@ -1146,7 +1381,7 @@ export function App() {
         />
         <aside className="inspector">
           <Inspector
-            graph={graph}
+            graph={visibleGraph}
             selection={selection}
             apply={apply}
             onSelect={(sel) => {
@@ -1163,6 +1398,31 @@ export function App() {
         </aside>
       </main>
 
+      {viewsOpen && (
+        <ViewsDialog
+          graph={graph}
+          filters={viewFilters}
+          view={activeView}
+          onClose={() => setViewsOpen(false)}
+          onApply={(filters) => {
+            setCustomPositions(
+              Object.fromEntries(visibleGraph.nodes.filter((n) => n.position).map((n) => [n.id, n.position!])),
+            );
+            setActiveViewId('');
+            setCustomFilters(filters);
+            setViewsOpen(false);
+            setSelection(null);
+            setConnect(null);
+            requestAnimationFrame(() => canvas.current?.fit());
+          }}
+          onSave={saveView}
+          onDelete={() => {
+            if (activeView) apply((g) => ({ ...g, views: (g.views ?? []).filter((v) => v.id !== activeView.id) }));
+            chooseView('');
+            setViewsOpen(false);
+          }}
+        />
+      )}
       {stylesOpen && (
         <StylesDialog
           graph={graph}

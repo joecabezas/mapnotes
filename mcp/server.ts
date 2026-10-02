@@ -184,7 +184,22 @@ const edgeOut = z.object({
   properties: kvList,
 });
 const styleOut = z.looseObject({ id: z.string(), target: z.enum(['node', 'edge']) });
+const viewOut = z.object({
+  id: z.string(),
+  name: z.string(),
+  filters: z.object({
+    types: z.array(z.string()).optional(),
+    styles: z.array(z.string()).optional(),
+    query: z.string().optional(),
+    properties: kvList.optional(),
+    relatedTo: z.array(z.string()).optional(),
+    depth: z.number().int().min(1).max(3).optional(),
+    edgeLabels: z.array(z.string()).optional(),
+  }),
+  positions: z.record(z.string(), position).optional(),
+});
 const graphOut = z.object({
+  views: z.array(viewOut).optional(),
   properties: kvList,
   styles: z.array(styleOut),
   nodes: z.array(nodeOut),

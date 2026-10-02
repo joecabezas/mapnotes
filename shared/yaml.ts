@@ -16,6 +16,20 @@ export function parseGraphYaml(text: string, issues?: string[]): Graph {
 function roundPositions(graph: Graph): Graph {
   return {
     ...graph,
+    ...(graph.views
+      ? {
+          views: graph.views.map((view) => ({
+            ...view,
+            ...(view.positions
+              ? {
+                  positions: Object.fromEntries(
+                    Object.entries(view.positions).map(([id, p]) => [id, { x: Math.round(p.x), y: Math.round(p.y) }]),
+                  ),
+                }
+              : {}),
+          })),
+        }
+      : {}),
     nodes: graph.nodes.map((n) =>
       n.position ? { ...n, position: { x: Math.round(n.position.x), y: Math.round(n.position.y) } } : n,
     ),

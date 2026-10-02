@@ -15,7 +15,12 @@ beforeEach(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mapnotes-test-'));
   client = new Client({ name: 'mapnotes-test', version: '0.0.0' });
   await client.connect(
-    new StdioClientTransport({ command: process.execPath, args: ['--import', 'tsx', 'mcp/server.ts'], cwd: root, stderr: 'ignore' }),
+    new StdioClientTransport({
+      command: process.execPath,
+      args: ['--import', 'tsx', 'mcp/server.ts'],
+      cwd: root,
+      stderr: 'ignore',
+    }),
   );
 });
 
@@ -25,7 +30,10 @@ afterEach(async () => {
 });
 
 async function call(name: string, args: Record<string, unknown> = {}): Promise<string> {
-  const result = (await client.callTool({ name, arguments: args })) as { content: { type: string; text: string }[]; isError?: boolean };
+  const result = (await client.callTool({ name, arguments: args })) as {
+    content: { type: string; text: string }[];
+    isError?: boolean;
+  };
   expect(result.isError).toBeFalsy();
   return result.content.map((c) => c.text).join('');
 }
@@ -48,10 +56,24 @@ describe('get_graph', () => {
     expect(JSON.parse(text).nodes.map((n: { id: string }) => n.id)).toEqual(['a']);
   });
 
+  it('preserves saved views and layouts through MCP edits and save', async () => {
+    const file = path.join(dir, 'views.json');
+    const view = { id: 'people', name: 'People', filters: { types: ['person'] }, positions: { a: { x: 12, y: 34 } } };
+    await fs.writeFile(file, JSON.stringify({ nodes: [{ id: 'a', properties: { type: 'person' } }], views: [view] }));
+    await call('load_graph', { path: file });
+    await call('edit_node', { id: 'a', label: 'Updated person' });
+    const result = await client.callTool({ name: 'get_graph', arguments: { format: 'json' } });
+    expect((result.structuredContent as any).graph.views).toEqual([view]);
+    await call('save_graph');
+    expect(JSON.parse(await fs.readFile(file, 'utf8')).views).toEqual([view]);
+  });
+
   it('keeps the file comment on YAML output', async () => {
     expect(await call('get_graph')).toMatch(/^# \(unsaved graph\)\n/);
     const file = path.join(dir, 'g.yaml');
     await call('save_graph', { path: file });
-    expect(await call('get_graph', { format: 'yaml' })).toMatch(new RegExp(`^# ${file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\n`));
+    expect(await call('get_graph', { format: 'yaml' })).toMatch(
+      new RegExp(`^# ${file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\n`),
+    );
   });
 });

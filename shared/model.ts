@@ -1,3 +1,5 @@
+import { normalizeViews, type GraphView } from './views';
+
 // Core data model shared by the web app, the dev file API and the MCP server.
 
 export interface KeyValue {
@@ -95,7 +97,15 @@ export interface EdgeStyle {
 export type Style = NodeStyle | EdgeStyle;
 
 /** Style fields that only apply to one target. */
-export const NODE_ONLY_STYLE_FIELDS = ['borderColor', 'borderWidth', 'shape', 'size', 'icon', 'iconColor', 'iconSize'] as const;
+export const NODE_ONLY_STYLE_FIELDS = [
+  'borderColor',
+  'borderWidth',
+  'shape',
+  'size',
+  'icon',
+  'iconColor',
+  'iconSize',
+] as const;
 export const EDGE_ONLY_STYLE_FIELDS = ['width', 'lineStyle', 'arrow', 'curve'] as const;
 
 /** Accepted ranges for numeric style values. */
@@ -107,6 +117,8 @@ export const STYLE_LIMITS = {
 } as const;
 
 export interface Graph {
+  /** Saved filters and independent layouts; nodes and edges stay shared. */
+  views?: GraphView[];
   properties: GraphProperty[];
   styles: Style[];
   nodes: GraphNode[];
@@ -232,11 +244,15 @@ export function normalizeGraph(input: unknown, issues?: string[]): Graph {
     edges: [],
   };
 
+  if (input.views !== undefined) graph.views = normalizeViews(input.views, issues);
+
   const seenStyles = new Set<string>();
   section(input, 'styles', issues).forEach((raw, i) => {
     const s = normalizeStyle(raw);
     if (!s) {
-      issues?.push(`${entryName('styles', i, raw)} was dropped: ${isObject(raw) ? 'it has no "id"' : 'it is not a mapping'}`);
+      issues?.push(
+        `${entryName('styles', i, raw)} was dropped: ${isObject(raw) ? 'it has no "id"' : 'it is not a mapping'}`,
+      );
       return;
     }
     if (seenStyles.has(s.id)) {
@@ -250,7 +266,9 @@ export function normalizeGraph(input: unknown, issues?: string[]): Graph {
   const seenNodes = new Set<string>();
   section(input, 'nodes', issues).forEach((raw, i) => {
     if (!isObject(raw) || !str(raw.id)) {
-      issues?.push(`${entryName('nodes', i, raw)} was dropped: ${isObject(raw) ? 'it has no "id"' : 'it is not a mapping'}`);
+      issues?.push(
+        `${entryName('nodes', i, raw)} was dropped: ${isObject(raw) ? 'it has no "id"' : 'it is not a mapping'}`,
+      );
       return;
     }
     const id = str(raw.id)!;
@@ -354,7 +372,10 @@ function checkStyle(g: Graph, id: string | undefined, target: Style['target']) {
   if (!id) return;
   const style = g.styles.find((s) => s.id === id);
   if (!style) throw new GraphError(`Style "${id}" does not exist`);
-  if (style.target !== target) throw new GraphError(`Style "${id}" is a ${style.target} style, not ${target === 'edge' ? 'an' : 'a'} ${target} style`);
+  if (style.target !== target)
+    throw new GraphError(
+      `Style "${id}" is a ${style.target} style, not ${target === 'edge' ? 'an' : 'a'} ${target} style`,
+    );
 }
 
 export interface AddNodeInput {
@@ -366,7 +387,12 @@ export interface AddNodeInput {
 }
 
 export function addNode(g: Graph, input: AddNodeInput): { graph: Graph; node: GraphNode } {
-  const id = input.id?.trim() || uniqueId('n', g.nodes.map((n) => n.id));
+  const id =
+    input.id?.trim() ||
+    uniqueId(
+      'n',
+      g.nodes.map((n) => n.id),
+    );
   if (g.nodes.some((n) => n.id === id)) throw new GraphError(`Node "${id}" already exists`);
   checkStyle(g, input.style, 'node');
   const node: GraphNode = stripUndefined({
@@ -415,6 +441,27 @@ export function editNode(g: Graph, input: EditNodeInput): { graph: Graph; node: 
     graph: {
       ...g,
       nodes: g.nodes.map((n) => (n.id === old.id ? node : n)),
+      ...(renamed && g.views
+        ? {
+            views: g.views.map((v) => {
+              const positions = v.positions ? { ...v.positions } : undefined;
+              if (positions && positions[old.id]) {
+                positions[node.id] = positions[old.id];
+                delete positions[old.id];
+              }
+              return {
+                ...v,
+                filters: {
+                  ...v.filters,
+                  ...(v.filters.relatedTo
+                    ? { relatedTo: v.filters.relatedTo.map((id) => (id === old.id ? node.id : id)) }
+                    : {}),
+                },
+                ...(positions ? { positions } : {}),
+              };
+            }),
+          }
+        : {}),
       edges: renamed
         ? g.edges.map((e) => ({
             ...e,
@@ -434,6 +481,22 @@ export function removeNode(g: Graph, id: string): { graph: Graph; removedEdges: 
     graph: {
       ...g,
       nodes: g.nodes.filter((n) => n.id !== id),
+      ...(g.views
+        ? {
+            views: g.views.map((v) => {
+              const positions = v.positions ? { ...v.positions } : undefined;
+              if (positions) delete positions[id];
+              return {
+                ...v,
+                filters: {
+                  ...v.filters,
+                  ...(v.filters.relatedTo ? { relatedTo: v.filters.relatedTo.filter((root) => root !== id) } : {}),
+                },
+                ...(positions ? { positions } : {}),
+              };
+            }),
+          }
+        : {}),
       edges: g.edges.filter((e) => !removedEdges.includes(e.id)),
     },
     removedEdges,
@@ -452,7 +515,12 @@ export interface AddEdgeInput {
 export function addEdge(g: Graph, input: AddEdgeInput): { graph: Graph; edge: GraphEdge } {
   requireNode(g, input.source);
   requireNode(g, input.target);
-  const id = input.id?.trim() || uniqueId('e', g.edges.map((e) => e.id));
+  const id =
+    input.id?.trim() ||
+    uniqueId(
+      'e',
+      g.edges.map((e) => e.id),
+    );
   if (g.edges.some((e) => e.id === id)) throw new GraphError(`Edge "${id}" already exists`);
   checkStyle(g, input.style, 'edge');
   const edge: GraphEdge = stripUndefined({
@@ -550,7 +618,8 @@ export function upsertStyle(g: Graph, raw: unknown): { graph: Graph; style: Styl
   if (!style) throw new GraphError('A style needs at least an "id"');
   const existing = g.styles.find((s) => s.id === style.id);
   if (existing && existing.target !== style.target) {
-    const users = style.target === 'node' ? g.edges.some((e) => e.style === style.id) : g.nodes.some((n) => n.style === style.id);
+    const users =
+      style.target === 'node' ? g.edges.some((e) => e.style === style.id) : g.nodes.some((n) => n.style === style.id);
     if (users) throw new GraphError(`Style "${style.id}" is in use by ${existing.target}s; cannot change its target`);
   }
   const styles = existing ? g.styles.map((s) => (s.id === style.id ? style : s)) : [...g.styles, style];
