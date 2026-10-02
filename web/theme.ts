@@ -1,4 +1,4 @@
-import type { StylesheetJson } from 'cytoscape';
+import type { NodeSingular, StylesheetJson } from 'cytoscape';
 import type { ArrowShape, CurveStyle, LineStyle, NodeShape, Style } from '../shared/model';
 import { iconKey } from './icons';
 
@@ -55,6 +55,30 @@ export const PALETTE = [
   '#7aa2f7', '#7dcfff', '#9ece6a', '#e0af68', '#ff9e64',
   '#f7768e', '#bb9af7', '#2ac3de', '#c0caf5', '#73daca',
 ];
+
+/**
+ * The colour of a cluster, from a hash (FNV-1a) of its label, so a name always gets the same colour:
+ * any hue, with saturation and lightness kept in a band that reads well on both themes.
+ */
+export function clusterColor(label: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < label.length; i++) h = Math.imul(h ^ label.charCodeAt(i), 0x01000193);
+  // Mix the bits (murmur3 finaliser), so labels that differ by a character land far apart.
+  h = Math.imul(h ^ (h >>> 16), 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  h = (h ^ (h >>> 16)) >>> 0;
+  const hue = h % 360;
+  const saturation = 0.6 + ((h >>> 9) % 21) / 100;
+  const lightness = 0.58 + ((h >>> 17) % 13) / 100;
+  // HSL to RGB.
+  const a = saturation * Math.min(lightness, 1 - lightness);
+  const channel = (n: number) => {
+    const k = (n + hue / 30) % 12;
+    const v = lightness - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+    return Math.round(v * 255).toString(16).padStart(2, '0');
+  };
+  return `#${channel(0)}${channel(8)}${channel(4)}`;
+}
 
 type Css = Record<string, string | number>;
 
@@ -155,6 +179,31 @@ export function buildStylesheet(styles: Style[], theme: ThemeName, icons: Record
       style: styleRules(s, icons, c.node),
     })),
     {
+      // A cluster is drawn as a zone around its members (the outline is computed in GraphCanvas),
+      // under every edge and node, in its own colour (see clusterColor) whatever its style.
+      selector: 'node.cluster',
+      style: {
+        'background-color': 'data(zoneColor)',
+        'border-color': 'data(zoneColor)',
+        color: 'data(zoneColor)',
+        shape: 'polygon',
+        'shape-polygon-points': (n: NodeSingular) => n.data('hullPoints'),
+        width: (n: NodeSingular) => n.data('hullW'),
+        height: (n: NodeSingular) => n.data('hullH'),
+        'background-opacity': 0.14,
+        'background-image': 'none',
+        'border-opacity': 0.7,
+        'border-style': 'dashed',
+        'text-valign': 'top',
+        'text-margin-y': -4,
+        'font-size': 13,
+        'font-weight': 'bold',
+        'z-compound-depth': 'bottom',
+      },
+    },
+    // A cluster's own edges are hidden: the zone shows what it connects to.
+    { selector: 'edge.cluster-edge', style: { display: 'none' } },
+    {
       selector: 'node:selected',
       style: {
         'border-color': c.accent,
@@ -164,6 +213,8 @@ export function buildStylesheet(styles: Style[], theme: ThemeName, icons: Record
         'underlay-padding': 6,
       },
     },
+    // The glow can't follow a polygon (it would be a rectangle); the outline shows the selection.
+    { selector: 'node.cluster:selected', style: { 'underlay-opacity': 0 } },
     {
       selector: 'edge:selected',
       style: {
@@ -186,6 +237,8 @@ export function buildStylesheet(styles: Style[], theme: ThemeName, icons: Record
       },
     },
     { selector: '.dimmed', style: { opacity: 0.18 } },
+    // Hidden nodes (H); Cytoscape hides their edges too.
+    { selector: 'node.hidden', style: { display: 'none' } },
     {
       selector: 'node.match',
       style: { 'underlay-color': c.connect, 'underlay-opacity': 0.35, 'underlay-padding': 8 },

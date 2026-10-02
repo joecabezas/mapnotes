@@ -12,6 +12,8 @@ interface Props {
 /** Keys naming an identifier, e.g. "id", "user_id", "Order ID", "nodeId", "ids". */
 const isIdKey = (key: string) => /(?:^|[^a-z])ids?(?![a-z])/i.test(key) || /[a-z]Ids?(?![a-z])/.test(key);
 
+const isUrl = (value: string) => /^https?:\/\//.test(value);
+
 const same = (a: KeyValue[], b: KeyValue[]) =>
   a.length === b.length && a.every((p, i) => p.key === b[i].key && p.value === b[i].value);
 
@@ -64,8 +66,8 @@ export function PropertyEditor({ properties, onChange, emptyHint }: Props) {
             onBlur={() => commit()}
             onKeyDown={onKey}
           />
-          {isIdKey(row.key) && row.value && <CopyButton text={row.value} what={row.key.trim()} />}
-          {/^https?:\/\//.test(row.value) && (
+          {(isIdKey(row.key) || isUrl(row.value)) && row.value && <CopyButton text={row.value} what={row.key.trim()} />}
+          {isUrl(row.value) && (
             <a className="icon-btn" href={row.value} target="_blank" rel="noreferrer" data-tip="Open link">
               <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />

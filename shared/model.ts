@@ -23,6 +23,11 @@ export interface GraphNode {
   style?: string;
   /** Saved canvas position; nodes without one are placed by the layout. */
   position?: Position;
+  /**
+   * Drawn as a zone around its neighbours (connected in either direction) instead of as a node;
+   * its own edges are hidden while it is a cluster. Everything else about the node is kept.
+   */
+  cluster?: boolean;
   properties: NodeProperty[];
 }
 
@@ -283,6 +288,7 @@ export function normalizeGraph(input: unknown, issues?: string[]): Graph {
         label: str(raw.label) ?? id,
         style: str(raw.style),
         position: x !== undefined && y !== undefined ? { x, y } : undefined,
+        cluster: raw.cluster === true || raw.cluster === 'true' ? true : undefined,
         properties: normalizeKeyValues(raw.properties),
       }),
     );
@@ -383,6 +389,7 @@ export interface AddNodeInput {
   label?: string;
   style?: string;
   position?: Position;
+  cluster?: boolean;
   properties?: KeyValue[];
 }
 
@@ -400,6 +407,7 @@ export function addNode(g: Graph, input: AddNodeInput): { graph: Graph; node: Gr
     label: input.label ?? id,
     style: input.style || undefined,
     position: input.position,
+    cluster: input.cluster || undefined,
     properties: mergeProperties([], input.properties),
   });
   return { graph: { ...g, nodes: [...g.nodes, node] }, node };
@@ -412,6 +420,8 @@ export interface EditNodeInput {
   /** Style id; an empty string clears the style. */
   style?: string;
   position?: Position;
+  /** Draws the node as a cluster around its neighbours (true) or as a node again (false). */
+  cluster?: boolean;
   setProperties?: KeyValue[];
   removeProperties?: string[];
   /** Replaces the whole property list (applied before set/remove). */
@@ -434,6 +444,10 @@ export function editNode(g: Graph, input: EditNodeInput): { graph: Graph; node: 
     else delete node.style;
   }
   if (input.position) node.position = input.position;
+  if (input.cluster !== undefined) {
+    if (input.cluster) node.cluster = true;
+    else delete node.cluster;
+  }
   node.properties = mergeProperties(node.properties, input.setProperties, input.removeProperties);
 
   const renamed = node.id !== old.id;
@@ -501,6 +515,20 @@ export function removeNode(g: Graph, id: string): { graph: Graph; removedEdges: 
     },
     removedEdges,
   };
+}
+
+/**
+ * The nodes a cluster node is drawn around: everything connected to it in either direction,
+ * except other clusters (they are zones themselves).
+ */
+export function clusterMembers(g: Graph, id: string): string[] {
+  const clusters = new Set(g.nodes.filter((n) => n.cluster).map((n) => n.id));
+  const members = new Set<string>();
+  for (const e of g.edges) {
+    const other = e.source === id ? e.target : e.target === id ? e.source : null;
+    if (other !== null && other !== id && !clusters.has(other)) members.add(other);
+  }
+  return [...members];
 }
 
 export interface AddEdgeInput {

@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import {
+  clusterMembers,
   editEdge,
   editGraphProperties,
   editNode,
@@ -147,15 +148,65 @@ function StyleSelect(props: {
   );
 }
 
+/**
+ * What can be done with the selection, in the same place on every panel: its actions, then Delete
+ * at the far end.
+ */
+function ActionBar(props: { children?: ReactNode; deleteTip: string; onDelete(): void }) {
+  return (
+    <div className="panel-actions" role="toolbar" aria-label="Actions">
+      {props.children}
+      {/* Just the icon next to other actions, so they share one line. */}
+      <button
+        className={`btn small danger delete${props.children ? ' icon-only' : ''}`}
+        data-tip={props.deleteTip}
+        aria-label={props.deleteTip}
+        onClick={props.onDelete}
+      >
+        <Icon name="trash" />
+        {!props.children && ' Delete'}
+      </button>
+    </div>
+  );
+}
+
 function NodePanel({ node, ...p }: Props & { node: GraphNode }) {
   const connected = p.graph.edges.filter((e) => e.source === node.id || e.target === node.id);
   const labelOf = (id: string) => p.graph.nodes.find((n) => n.id === id)?.label ?? id;
+  const members = clusterMembers(p.graph, node.id);
+  const setCluster = (cluster: boolean) => p.apply((g) => editNode(g, { id: node.id, cluster }).graph);
   return (
     <>
       <header className="panel-head">
-        <span className="kind-badge">Node</span>
+        <span className={`kind-badge${node.cluster ? ' cluster' : ''}`}>{node.cluster ? 'Cluster' : 'Node'}</span>
         <h2 title={node.label}>{node.label}</h2>
       </header>
+      <ActionBar
+        deleteTip={`Delete this ${node.cluster ? 'cluster' : 'node'} and its edges (Del)`}
+        onDelete={() => p.apply((g) => removeNode(g, node.id).graph) && p.onSelect(null)}
+      >
+        <button className="btn small" onClick={() => p.onConnectFrom(node.id)} data-tip="Connect to another node: click the target next (E)">
+          <Icon name="connect" /> Connect
+        </button>
+        {node.cluster ? (
+          <button className="btn small" data-tip="Draw it as a node again, with its edges" onClick={() => setCluster(false)}>
+            <Icon name="node" /> Convert to node
+          </button>
+        ) : (
+          <button
+            className="btn small"
+            disabled={!members.length}
+            data-tip={
+              members.length
+                ? `Draw this node as a zone around the ${members.length} node${members.length === 1 ? '' : 's'} connected to it, hiding its edges. Convert it back any time.`
+                : 'Connect this node to others first: a cluster is drawn around the nodes connected to it'
+            }
+            onClick={() => setCluster(true)}
+          >
+            <Icon name="cluster" /> Convert to cluster
+          </button>
+        )}
+      </ActionBar>
       <section>
         <Field
           label="Label"
@@ -183,6 +234,25 @@ function NodePanel({ node, ...p }: Props & { node: GraphNode }) {
           onChange={(style) => p.apply((g) => editNode(g, { id: node.id, style }).graph)}
         />
       </section>
+      {node.cluster && (
+        <section>
+          <h3>
+            Members <span className="count">{members.length}</span>
+          </h3>
+          {members.length === 0 && (
+            <p className="muted small">Nothing is connected to this cluster, so it is drawn as a node.</p>
+          )}
+          <ul className="link-list">
+            {members.map((id) => (
+              <li key={id}>
+                <button className="link" onClick={() => p.onSelect({ kind: 'node', id })} data-tip="Select node">
+                  {labelOf(id)}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <section>
         <h3>Properties</h3>
         <PropertyEditor
@@ -212,19 +282,7 @@ function NodePanel({ node, ...p }: Props & { node: GraphNode }) {
             );
           })}
         </ul>
-        <button className="btn small" onClick={() => p.onConnectFrom(node.id)} data-tip="Then click the target node (E)">
-          <Icon name="plus" /> Connect to…
-        </button>
       </section>
-      <footer className="panel-foot">
-        <button
-          className="btn danger"
-          data-tip="Delete this node and its edges (Del)"
-          onClick={() => p.apply((g) => removeNode(g, node.id).graph) && p.onSelect(null)}
-        >
-          Delete node
-        </button>
-      </footer>
     </>
   );
 }
@@ -241,6 +299,15 @@ function EdgePanel({ edge, ...p }: Props & { edge: GraphEdge }) {
         <span className="kind-badge edge">Edge</span>
         <h2>{edge.label || edge.id}</h2>
       </header>
+      <ActionBar deleteTip="Delete this edge (Del)" onDelete={() => p.apply((g) => removeEdge(g, edge.id)) && p.onSelect(null)}>
+        <button
+          className="btn small"
+          data-tip="Swap source and target"
+          onClick={() => p.apply((g) => editEdge(g, { id: edge.id, source: edge.target, target: edge.source }).graph)}
+        >
+          <Icon name="swap" /> Reverse direction
+        </button>
+      </ActionBar>
       <section>
         <Field
           label="Label"
@@ -273,13 +340,6 @@ function EdgePanel({ edge, ...p }: Props & { edge: GraphEdge }) {
             {nodeOptions}
           </select>
         </label>
-        <button
-          className="btn small ghost"
-          data-tip="Swap source and target"
-          onClick={() => p.apply((g) => editEdge(g, { id: edge.id, source: edge.target, target: edge.source }).graph)}
-        >
-          <Icon name="swap" /> Reverse direction
-        </button>
         <StyleSelect
           styles={p.graph.styles}
           target="edge"
@@ -296,15 +356,6 @@ function EdgePanel({ edge, ...p }: Props & { edge: GraphEdge }) {
           onChange={(properties) => p.apply((g) => editEdge(g, { id: edge.id, properties }).graph)}
         />
       </section>
-      <footer className="panel-foot">
-        <button
-          className="btn danger"
-          data-tip="Delete this edge (Del)"
-          onClick={() => p.apply((g) => removeEdge(g, edge.id)) && p.onSelect(null)}
-        >
-          Delete edge
-        </button>
-      </footer>
     </>
   );
 }
@@ -404,6 +455,10 @@ function MultiNodePanel({ ids, ...p }: Props & { ids: string[] }) {
         <span className="kind-badge">Nodes</span>
         <h2>{nodes.length} nodes selected</h2>
       </header>
+      <ActionBar
+        deleteTip={`Delete these ${nodes.length} nodes and their edges (Del)`}
+        onDelete={() => p.apply((g) => nodes.reduce((acc, n) => removeNode(acc, n.id).graph, g)) && p.onSelect(null)}
+      />
       <section>
         <p className="muted small">
           Drag any of them to move them together. <kbd>Shift</kbd>/<kbd>Ctrl</kbd> + click adds or removes a node.
@@ -453,15 +508,6 @@ function MultiNodePanel({ ids, ...p }: Props & { ids: string[] }) {
           ))}
         </ul>
       </section>
-      <footer className="panel-foot">
-        <button
-          className="btn danger"
-          data-tip="Delete these nodes and their edges (Del)"
-          onClick={() => p.apply((g) => nodes.reduce((acc, n) => removeNode(acc, n.id).graph, g)) && p.onSelect(null)}
-        >
-          Delete {nodes.length} nodes
-        </button>
-      </footer>
     </>
   );
 }

@@ -32,9 +32,11 @@ Every push to `master` is built and published to GitHub Pages by `.github/workfl
 | Add node | `N`, **+ Node**, or double-click empty canvas |
 | Connect nodes | `E` / **Connect**, click source, then target |
 | Inspect / edit | Click a node or edge; edit label, id, style, properties on the right |
-| Select several | `Shift`/`Ctrl` + click, or `Shift` + drag a box on empty canvas; `Ctrl+A` selects all. Drag any selected node to move them together; the inspector can restyle or delete them at once |
+| Select several | `Shift`/`Ctrl` + click, or `Shift` + drag a box on empty canvas; `Ctrl+A` selects all. Drag any selected node, or press the arrow keys, to move them together (arrows step along a 10px grid); the inspector can restyle or delete them at once |
 | Delete | `Del` / `Backspace`, or the button in the inspector |
-| Arrange | Drag nodes, or pick a layout from the dropdown (it applies immediately; **↻** runs it again). **Smart (layered)** puts parents above their children and minimises edge crossings; **Force-directed** spreads nodes out like springs. `F` fits the view |
+| Clusters | Select a node and click **Convert to cluster** in the inspector: it is drawn as a zone around every node connected to it (in either direction), and its own edges are hidden. The zone bends around nodes that aren't in it, so it never covers them. Click the zone to select it, drag it to move its members, and **Convert to node** to bring the node and its edges back as they were. The node only gets `cluster: true` in the file; nothing else changes |
+| Hide / show | `H` hides the selected nodes and their edges; `Shift+H` shows them all again (the status bar counts hidden nodes). Hiding only affects the view and isn't saved, but it can be undone |
+| Arrange | Drag nodes, or pick a layout from the dropdown (it applies immediately; **↻** runs it again). **Smart (layered)** puts parents above their children and minimises edge crossings; **Force-directed** spreads nodes out like springs. `F` fits the selection in view, or the whole graph if nothing is selected |
 | Styles | **🎨 Styles**: node color/border/shape/size/icon, edge color/width/line/arrow/curve |
 | Search | `/` — matches labels, ids and property values; `Enter` jumps to the first hit |
 | Undo / redo | `Ctrl+Z` / `Ctrl+Shift+Z` |
@@ -186,6 +188,7 @@ nodes:
     label: PR 101
     style: pr                    # optional
     position: { x: 0, y: 120 }   # optional; saved when you drag
+    cluster: true                # optional; draw it as a zone around the nodes connected to it
     properties:
       - key: author
         value: sam

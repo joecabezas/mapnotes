@@ -39,9 +39,40 @@ const ICONS = {
       <circle cx="8.5" cy="7.5" r=".5" fill="currentColor" />
     </>
   ),
+  connect: (
+    <>
+      <circle cx="19" cy="5" r="2" />
+      <circle cx="5" cy="19" r="2" />
+      <path d="M5 17A12 12 0 0 1 17 5" />
+    </>
+  ),
+  /** A dashed zone around three nodes. */
+  cluster: (
+    <>
+      <rect x="2" y="2" width="20" height="20" rx="7" strokeDasharray="3 3" />
+      <circle cx="8.5" cy="9" r="1.5" />
+      <circle cx="15.5" cy="9" r="1.5" />
+      <circle cx="12" cy="15.5" r="1.5" />
+    </>
+  ),
+  /** One node with its edges. */
+  node: (
+    <>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v6M12 16v6M2 12h6M16 12h6" />
+    </>
+  ),
+  trash: <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6" />,
   swap: <path d="m16 3 4 4-4 4M20 7H4M8 21l-4-4 4-4M4 17h16" />,
   arrowRight: <path d="M5 12h14M12 5l7 7-7 7" />,
   arrowLeft: <path d="M19 12H5M12 19l-7-7 7-7" />,
+  eyeOff: (
+    <>
+      <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+      <path d="M6.61 6.61A13.53 13.53 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+      <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24M2 2l20 20" />
+    </>
+  ),
 } satisfies Record<string, ReactNode>;
 
 export type IconName = keyof typeof ICONS;

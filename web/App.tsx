@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { addEdge, addNode, emptyGraph, type Graph, type Position, removeEdge, removeNode } from '../shared/model';
+import { addEdge, addNode, clusterMembers, emptyGraph, type Graph, type Position, removeEdge, removeNode } from '../shared/model';
 import { formatForPath, parseGraphText, serializeGraph, serializeGraphYaml } from '../shared/yaml';
 import { GraphCanvas, type GraphCanvasHandle, type Selection } from './components/GraphCanvas';
 import { LAYOUTS, layoutLabel, type LayoutName } from './layout';
@@ -36,6 +36,21 @@ const CANVAS_MIN_WIDTH = 320;
 const HISTORY_LIMIT = 200;
 /** Edits closer together than this collapse into a single undo step. */
 const COALESCE_MS = 600;
+/** The grid the arrow keys move the selected nodes along. */
+const NUDGE_PX = 10;
+const NUDGES: Record<string, Position> = {
+  ArrowUp: { x: 0, y: -1 },
+  ArrowDown: { x: 0, y: 1 },
+  ArrowLeft: { x: -1, y: 0 },
+  ArrowRight: { x: 1, y: 0 },
+};
+
+/** The next grid line from `v` in direction `dir` (-1, 0 or 1); off-grid values snap to the nearest line that way. */
+function nextGridLine(v: number, dir: number): number {
+  if (dir > 0) return (Math.floor(v / NUDGE_PX) + 1) * NUDGE_PX;
+  if (dir < 0) return (Math.ceil(v / NUDGE_PX) - 1) * NUDGE_PX;
+  return v;
+}
 /** How often the open file is checked for changes made by other tools (e.g. the MCP server). */
 const FILE_POLL_MS = 1000;
 /** Edits closer together than this are written to the file once. */
@@ -64,12 +79,17 @@ interface Issues {
   source: string;
   list: string[];
 }
-interface History {
+/** One undo step: the graph, and which of its nodes are hidden (H). */
+interface Snapshot {
   graph: Graph;
-  past: Graph[];
-  future: Graph[];
+  hidden: string[];
+}
+interface History extends Snapshot {
+  past: Snapshot[];
+  future: Snapshot[];
   lastAt: number;
 }
+const snapshot = (h: History): Snapshot => ({ graph: h.graph, hidden: h.hidden });
 
 function storageGet(key: string): string | null {
   try {
@@ -135,7 +155,7 @@ function isTyping(e: KeyboardEvent) {
 }
 
 export function App() {
-  const [hist, setHist] = useState<History>({ graph: emptyGraph(), past: [], future: [], lastAt: 0 });
+  const [hist, setHist] = useState<History>({ graph: emptyGraph(), hidden: [], past: [], future: [], lastAt: 0 });
   const graph = hist.graph;
   const graphRef = useRef(graph);
   graphRef.current = graph;
@@ -145,6 +165,11 @@ export function App() {
   const fileRef = useRef(file);
   fileRef.current = file;
   const [selection, setSelection] = useState<Selection>(null);
+  /** Nodes hidden from view (H / Shift+H). View state only: not saved with the graph, but undoable. */
+  const hidden = useMemo(() => {
+    const exists = new Set(graph.nodes.map((n) => n.id));
+    return hist.hidden.filter((id) => exists.has(id));
+  }, [graph.nodes, hist.hidden]);
   const [connect, setConnect] = useState<{ source: string | null } | null>(null);
   const [theme, setTheme] = useState<ThemeName>(() => (storageGet(THEME_KEY) === 'light' ? 'light' : 'dark'));
   const [stylesOpen, setStylesOpen] = useState(false);
@@ -205,8 +230,8 @@ export function App() {
       if (!record) return { ...h, graph: next };
       const now = Date.now();
       const coalesce = !fromRemote && now - h.lastAt < COALESCE_MS && h.past.length > 0;
-      const past = coalesce ? h.past : [...h.past, h.graph].slice(-HISTORY_LIMIT);
-      return { graph: next, past, future: [], lastAt: fromRemote ? 0 : now };
+      const past = coalesce ? h.past : [...h.past, snapshot(h)].slice(-HISTORY_LIMIT);
+      return { graph: next, hidden: h.hidden, past, future: [], lastAt: fromRemote ? 0 : now };
     });
   }, []);
 
@@ -226,15 +251,11 @@ export function App() {
 
   const undo = useCallback(() => {
     setHist((h) =>
-      h.past.length
-        ? { graph: h.past[h.past.length - 1], past: h.past.slice(0, -1), future: [h.graph, ...h.future], lastAt: 0 }
-        : h,
+      h.past.length ? { ...h.past[h.past.length - 1], past: h.past.slice(0, -1), future: [snapshot(h), ...h.future], lastAt: 0 } : h,
     );
   }, []);
   const redo = useCallback(() => {
-    setHist((h) =>
-      h.future.length ? { graph: h.future[0], past: [...h.past, h.graph], future: h.future.slice(1), lastAt: 0 } : h,
-    );
+    setHist((h) => (h.future.length ? { ...h.future[0], past: [...h.past, snapshot(h)], future: h.future.slice(1), lastAt: 0 } : h));
   }, []);
 
   /** Replaces the graph and clears undo history, without writing it back to the file. */
@@ -243,7 +264,7 @@ export function App() {
     graphRef.current = next;
     setActiveViewId('');
     setCustomFilters(null);
-    setHist({ graph: next, past: [], future: [], lastAt: 0 });
+    setHist({ graph: next, hidden: [], past: [], future: [], lastAt: 0 });
   }, []);
 
   /** Reads the linked file into the canvas. `fresh` (a newly opened file) also clears undo history. */
@@ -473,8 +494,21 @@ export function App() {
     toast(`Saved view “${name}”`);
   };
 
-  // ---- Automatic layout: of the selected nodes when there are several, otherwise of the whole graph.
-  const layoutScope = selectedNodeIds.length >= 2 ? selectedNodeIds : null;
+  /** The selected nodes, with clusters swapped for their visible members: what moving them moves. */
+  const movingNodeIds = useMemo(() => {
+    if (!visibleGraph.nodes.some((n) => n.cluster && selectedNodeIds.includes(n.id))) return selectedNodeIds;
+    const isHidden = new Set(hidden);
+    const ids = selectedNodeIds.flatMap((id) => {
+      if (!visibleGraph.nodes.find((n) => n.id === id)?.cluster) return [id];
+      const members = clusterMembers(visibleGraph, id).filter((m) => !isHidden.has(m));
+      // A cluster without visible members is drawn as a node, and moves like one.
+      return members.length ? members : [id];
+    });
+    return [...new Set(ids)];
+  }, [visibleGraph, hidden, selectedNodeIds]);
+
+  // ---- Automatic layout: of the selected nodes (a cluster's members) when there are several, otherwise of the whole graph.
+  const layoutScope = movingNodeIds.length >= 2 ? movingNodeIds : null;
   /** Layout runs in flight (a newer run can start before an older one finishes). */
   const [layoutsRunning, setLayoutsRunning] = useState(0);
   const runLayout = useCallback(
@@ -503,13 +537,15 @@ export function App() {
   );
 
   const canExpand = useMemo(() => {
+    const skip = new Set([...selectedNodeIds, ...hidden]);
     const sel = new Set(selectedNodeIds);
-    return visibleGraph.edges.some((e) => sel.has(e.source) && !sel.has(e.target));
-  }, [visibleGraph.edges, selectedNodeIds]);
+    return visibleGraph.edges.some((e) => sel.has(e.source) && !skip.has(e.target));
+  }, [visibleGraph.edges, hidden, selectedNodeIds]);
 
   const expandSelection = useCallback(() => {
     const sel = new Set(selectedNodeIds);
-    const added = visibleGraph.edges.filter((e) => sel.has(e.source) && !sel.has(e.target)).map((e) => e.target);
+    const skip = new Set([...selectedNodeIds, ...hidden]);
+    const added = visibleGraph.edges.filter((e) => sel.has(e.source) && !skip.has(e.target)).map((e) => e.target);
     if (!added.length) return;
     const after = [...selectedNodeIds, ...new Set(added)];
     setExpansions((stack) => [...(lastExpansion ? stack : []), { before: selection, after }]);
@@ -530,13 +566,41 @@ export function App() {
     );
   }, [graph.nodes, lastExpansion]);
 
-  const startConnect = useCallback(
-    (source: string | null = null) => {
-      setConnect({ source });
-      toast(source ? 'Click the target node' : 'Click the source node, then the target node');
-    },
-    [toast],
-  );
+  // ---- Hide / reveal nodes (H / Shift+H), like Blender. A hidden node's edges are hidden with it.
+  // Each change is its own undo step.
+  const setHidden = useCallback((next: string[]) => {
+    setHist((h) => ({ ...h, hidden: next, past: [...h.past, snapshot(h)].slice(-HISTORY_LIMIT), future: [], lastAt: 0 }));
+  }, []);
+
+  const hideSelection = useCallback(() => {
+    if (!selectedNodeIds.length) return;
+    setHidden([...new Set([...hidden, ...selectedNodeIds])]);
+    setSelection(null);
+  }, [hidden, selectedNodeIds, setHidden]);
+
+  // Hidden nodes (and their edges) can't stay selected, e.g. after undoing a reveal.
+  useEffect(() => {
+    const isHidden = new Set(hidden);
+    if (!isHidden.size || !selection) return;
+    if (selection.kind === 'edge') {
+      const edge = graph.edges.find((e) => e.id === selection.id);
+      if (edge && (isHidden.has(edge.source) || isHidden.has(edge.target))) setSelection(null);
+    } else if (selectedNodeIds.some((id) => isHidden.has(id))) {
+      setSelection(nodeSelection(selectedNodeIds.filter((id) => !isHidden.has(id))));
+    }
+  }, [graph.edges, hidden, selectedNodeIds, selection]);
+
+  /** Shows every hidden node again, selecting them. */
+  const revealHidden = useCallback(() => {
+    if (!hidden.length) return;
+    setSelection(nodeSelection(hidden));
+    setHidden([]);
+  }, [hidden, setHidden]);
+
+  const startConnect = useCallback((source: string | null = null) => {
+    setConnect({ source });
+    toast(source ? 'Click the target node' : 'Click the source node, then the target node');
+  }, [toast]);
 
   const onConnectTap = useCallback(
     (id: string) => {
@@ -695,7 +759,13 @@ export function App() {
         const mine = graphRef.current;
         const mineText = textFor(mine, handle.name);
         await writeFileText(handle, mineText);
-        setHist((h) => ({ graph: mine, past: [...h.past, theirs].slice(-HISTORY_LIMIT), future: [], lastAt: 0 }));
+        setHist((h) => ({
+          graph: mine,
+          hidden: h.hidden,
+          past: [...h.past, { graph: theirs, hidden: h.hidden }].slice(-HISTORY_LIMIT),
+          future: [],
+          lastAt: 0,
+        }));
         setFile((cur) => (cur?.handle === handle ? { ...cur, status: 'saved' } : cur));
         toast(`Saved your version to ${handle.name}; Ctrl+Z brings back the file's version`);
       } catch (err) {
@@ -797,11 +867,24 @@ export function App() {
       }
       if (mod && e.key.toLowerCase() === 'a') {
         e.preventDefault();
-        const ids = visibleRef.current.nodes.map((n) => n.id);
+        const hiddenSet = new Set(hidden);
+        const ids = visibleRef.current.nodes.map((n) => n.id).filter((id) => !hiddenSet.has(id));
         setSelection(ids.length ? { kind: 'nodes', ids } : null);
         return;
       }
       if (mod || e.altKey) return;
+      const nudge = NUDGES[e.key];
+      if (nudge) {
+        if (!movingNodeIds.length) return;
+        e.preventDefault();
+        const moving = new Set(movingNodeIds);
+        const positions: Record<string, Position> = {};
+        for (const n of visibleRef.current.nodes) {
+          if (n.position && moving.has(n.id)) positions[n.id] = { x: nextGridLine(n.position.x, nudge.x), y: nextGridLine(n.position.y, nudge.y) };
+        }
+        onNodesMoved(positions, true);
+        return;
+      }
       switch (e.key) {
         case 'n':
         case 'N':
@@ -830,6 +913,12 @@ export function App() {
           else if (connect) setConnect(null);
           else setSelection(null);
           break;
+        case 'h':
+          hideSelection();
+          break;
+        case 'H':
+          revealHidden();
+          break;
         case 'f':
         case 'F':
           canvas.current?.fit();
@@ -851,27 +940,7 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [
-    addNodeInView,
-    closeFileDrawer,
-    connect,
-    deleteSelection,
-    expandSelection,
-    fileDrawerOpen,
-    helpOpen,
-    layoutName,
-    mcpOpen,
-    openAction,
-    redo,
-    runLayout,
-    save,
-    selection,
-    shrinkSelection,
-    startConnect,
-    stylesOpen,
-    undo,
-    viewsOpen,
-  ]);
+  }, [addNodeInView, closeFileDrawer, connect, deleteSelection, expandSelection, fileDrawerOpen, helpOpen, hidden, hideSelection, layoutName, mcpOpen, movingNodeIds, onNodesMoved, openAction, revealHidden, redo, runLayout, save, selection, shrinkSelection, startConnect, stylesOpen, undo, viewsOpen]);
 
   return (
     <div className="app">
@@ -1003,12 +1072,7 @@ export function App() {
               <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8M21 3v5h-5M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16M8 16H3v5" />
             </svg>
           </button>
-          <button
-            className="btn ghost icon"
-            data-tip="Fit graph to screen (F)"
-            aria-label="Fit graph to screen"
-            onClick={() => canvas.current?.fit()}
-          >
+          <button className="btn ghost icon" data-tip="Fit selection, or the whole graph, to screen (F)" aria-label="Fit selection or graph to screen" onClick={() => canvas.current?.fit()}>
             <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" />
             </svg>
@@ -1209,6 +1273,7 @@ export function App() {
           connecting={connect !== null}
           connectSource={connect?.source ?? null}
           highlight={matches}
+          hidden={hidden}
           onSelect={setSelection}
           onNodeTapInConnectMode={onConnectTap}
           onBackgroundDoubleTap={addNodeAt}
@@ -1254,6 +1319,15 @@ export function App() {
             >
               <span className="dot" /> <span className="sync-label">Browser storage</span>
             </div>
+          )}
+          {hidden.length > 0 && (
+            <button
+              className="hidden-count"
+              data-tip="Show the hidden nodes again (Shift+H)"
+              onClick={revealHidden}
+            >
+              <Icon name="eyeOff" /> {hidden.length} hidden
+            </button>
           )}
         </div>
 
