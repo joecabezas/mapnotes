@@ -949,8 +949,20 @@ button.sync.error {
   flex: 1;
 }
 
-.panel-foot {
-  padding: 14px 16px;
+/* The selection's actions, right under the panel title; Delete always sits at the far end. */
+.panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel-2) 45%, transparent);
+}
+.panel-actions .delete {
+  margin-left: auto;
+}
+.panel-actions .icon-only {
+  padding-inline: 6px;
 }
 
 .stats {
