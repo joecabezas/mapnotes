@@ -186,6 +186,8 @@ export function buildStylesheet(styles: Style[], theme: ThemeName, icons: Record
       },
     },
     { selector: '.dimmed', style: { opacity: 0.18 } },
+    // Hidden nodes (H); Cytoscape hides their edges too.
+    { selector: 'node.hidden', style: { display: 'none' } },
     {
       selector: 'node.match',
       style: { 'underlay-color': c.connect, 'underlay-opacity': 0.35, 'underlay-padding': 8 },

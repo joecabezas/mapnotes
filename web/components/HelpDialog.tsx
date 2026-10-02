@@ -10,6 +10,7 @@ const SHORTCUTS: [string, string][] = [
   ['Shift + drag', 'Select the nodes inside a box (drag empty canvas)'],
   ['Ctrl+A', 'Select all nodes'],
   ['+ / −', 'Expand the selection to the targets of its outgoing edges / undo the last expansion'],
+  ['H / Shift+H', 'Hide the selected nodes and their edges / show all hidden nodes again'],
   ['Esc', 'Cancel connect mode / clear selection'],
   ['Ctrl+Z / Ctrl+Shift+Z', 'Undo / redo'],
   ['Ctrl+S', fileAccessSupported ? 'Save to the open file (or choose a new one)' : 'Download the graph as YAML'],

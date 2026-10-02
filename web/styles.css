@@ -340,8 +340,34 @@ button.sync.error {
   border-radius: 0 8px 0 0;
   box-shadow: var(--shadow);
 }
+.graph-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
 .graph-status .sync {
-  width: 100%;
+  flex: 1;
+}
+.hidden-count {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.hidden-count:hover {
+  color: inherit;
+}
+.hidden-count .toolbar-icon {
+  width: 14px;
+  height: 14px;
 }
 
 /* ---------- Buttons ---------- */

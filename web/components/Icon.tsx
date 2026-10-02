@@ -42,6 +42,13 @@ const ICONS = {
   swap: <path d="m16 3 4 4-4 4M20 7H4M8 21l-4-4 4-4M4 17h16" />,
   arrowRight: <path d="M5 12h14M12 5l7 7-7 7" />,
   arrowLeft: <path d="M19 12H5M12 19l-7-7 7-7" />,
+  eyeOff: (
+    <>
+      <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+      <path d="M6.61 6.61A13.53 13.53 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+      <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24M2 2l20 20" />
+    </>
+  ),
 } satisfies Record<string, ReactNode>;
 
 export type IconName = keyof typeof ICONS;

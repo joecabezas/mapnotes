@@ -35,6 +35,8 @@ interface Props {
   connecting: boolean;
   connectSource: string | null;
   highlight: string[] | null;
+  /** Nodes not shown; their edges are hidden with them. */
+  hidden: string[];
   onSelect(sel: Selection): void;
   onNodeTapInConnectMode(id: string): void;
   onBackgroundDoubleTap(pos: Position): void;
@@ -130,7 +132,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
   }
 
   useImperativeHandle(ref, () => ({
-    fit: () => cyRef.current?.animate({ fit: { eles: cyRef.current.elements(), padding: 50 }, duration: 300 }),
+    fit: () => cyRef.current?.animate({ fit: { eles: cyRef.current.elements(':visible'), padding: 50 }, duration: 300 }),
     runLayout,
     center(sel) {
       const cy = cyRef.current;
@@ -341,6 +343,20 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.graph]);
+
+  // Hidden nodes: not shown, and not selectable (e.g. by a box selection) until revealed.
+  // Runs before the selection is reflected, so nodes revealed and selected at once can be selected.
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    const ids = new Set(props.hidden.map(nid));
+    cy.batch(() => {
+      cy.nodes().forEach((n) => {
+        if (ids.has(n.id())) n.addClass('hidden').unselect().unselectify();
+        else if (n.hasClass('hidden')) n.removeClass('hidden').selectify();
+      });
+    });
+  }, [props.hidden, props.graph]);
 
   // Reflect the app's selection.
   useEffect(() => {

@@ -34,6 +34,7 @@ Every push to `master` is built and published to GitHub Pages by `.github/workfl
 | Inspect / edit | Click a node or edge; edit label, id, style, properties on the right |
 | Select several | `Shift`/`Ctrl` + click, or `Shift` + drag a box on empty canvas; `Ctrl+A` selects all. Drag any selected node to move them together; the inspector can restyle or delete them at once |
 | Delete | `Del` / `Backspace`, or the button in the inspector |
+| Hide / show | `H` hides the selected nodes and their edges; `Shift+H` shows them all again (the status bar counts hidden nodes). Hiding only affects the view and isn't saved |
 | Arrange | Drag nodes, or pick a layout from the dropdown (it applies immediately; **↻** runs it again). **Smart (layered)** puts parents above their children and minimises edge crossings; **Force-directed** spreads nodes out like springs. `F` fits the view |
 | Styles | **🎨 Styles**: node color/border/shape/size/icon, edge color/width/line/arrow/curve |
 | Search | `/` — matches labels, ids and property values; `Enter` jumps to the first hit |

@@ -137,6 +137,8 @@ export function App() {
   const fileRef = useRef(file);
   fileRef.current = file;
   const [selection, setSelection] = useState<Selection>(null);
+  /** Nodes hidden from view (H / Shift+H). View state only: not saved with the graph. */
+  const [hidden, setHidden] = useState<string[]>([]);
   const [connect, setConnect] = useState<{ source: string | null } | null>(null);
   const [theme, setTheme] = useState<ThemeName>(() => (storageGet(THEME_KEY) === 'light' ? 'light' : 'dark'));
   const [stylesOpen, setStylesOpen] = useState(false);
@@ -217,6 +219,7 @@ export function App() {
     skipSave.current = true;
     graphRef.current = next;
     setHist({ graph: next, past: [], future: [], lastAt: 0 });
+    setHidden([]);
   }, []);
 
   /** Reads the linked file into the canvas. `fresh` (a newly opened file) also clears undo history. */
@@ -420,13 +423,14 @@ export function App() {
   );
 
   const canExpand = useMemo(() => {
-    const sel = new Set(selectedNodeIds);
-    return graph.edges.some((e) => sel.has(e.source) && !sel.has(e.target));
-  }, [graph.edges, selectedNodeIds]);
+    const skip = new Set([...selectedNodeIds, ...hidden]);
+    return graph.edges.some((e) => skip.has(e.source) && !skip.has(e.target));
+  }, [graph.edges, hidden, selectedNodeIds]);
 
   const expandSelection = useCallback(() => {
     const sel = new Set(selectedNodeIds);
-    const added = graph.edges.filter((e) => sel.has(e.source) && !sel.has(e.target)).map((e) => e.target);
+    const skip = new Set([...selectedNodeIds, ...hidden]);
+    const added = graph.edges.filter((e) => sel.has(e.source) && !skip.has(e.target)).map((e) => e.target);
     if (!added.length) return;
     const after = [...selectedNodeIds, ...new Set(added)];
     setExpansions((stack) => [...(lastExpansion ? stack : []), { before: selection, after }]);
@@ -446,6 +450,26 @@ export function App() {
           : before,
     );
   }, [graph.nodes, lastExpansion]);
+
+  // ---- Hide / reveal nodes (H / Shift+H), like Blender. A hidden node's edges are hidden with it.
+  // Forget hidden nodes that no longer exist, so an undone delete doesn't bring them back hidden.
+  useEffect(() => {
+    const exists = new Set(graph.nodes.map((n) => n.id));
+    setHidden((h) => (h.every((id) => exists.has(id)) ? h : h.filter((id) => exists.has(id))));
+  }, [graph.nodes]);
+
+  const hideSelection = useCallback(() => {
+    if (!selectedNodeIds.length) return;
+    setHidden((h) => [...new Set([...h, ...selectedNodeIds])]);
+    setSelection(null);
+  }, [selectedNodeIds]);
+
+  /** Shows every hidden node again, selecting them. */
+  const revealHidden = useCallback(() => {
+    if (!hidden.length) return;
+    setSelection(nodeSelection(hidden));
+    setHidden([]);
+  }, [hidden]);
 
   const startConnect = useCallback((source: string | null = null) => {
     setConnect({ source });
@@ -705,7 +729,8 @@ export function App() {
       }
       if (mod && e.key.toLowerCase() === 'a') {
         e.preventDefault();
-        const ids = graphRef.current.nodes.map((n) => n.id);
+        const hiddenSet = new Set(hidden);
+        const ids = graphRef.current.nodes.map((n) => n.id).filter((id) => !hiddenSet.has(id));
         setSelection(ids.length ? { kind: 'nodes', ids } : null);
         return;
       }
@@ -738,6 +763,12 @@ export function App() {
           else if (connect) setConnect(null);
           else setSelection(null);
           break;
+        case 'h':
+          hideSelection();
+          break;
+        case 'H':
+          revealHidden();
+          break;
         case 'f':
         case 'F':
           canvas.current?.fit();
@@ -759,7 +790,7 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [addNodeInView, closeFileDrawer, connect, deleteSelection, expandSelection, fileDrawerOpen, helpOpen, layoutName, mcpOpen, openAction, redo, runLayout, save, selection, shrinkSelection, startConnect, stylesOpen, undo]);
+  }, [addNodeInView, closeFileDrawer, connect, deleteSelection, expandSelection, fileDrawerOpen, helpOpen, hidden, hideSelection, layoutName, mcpOpen, openAction, revealHidden, redo, runLayout, save, selection, shrinkSelection, startConnect, stylesOpen, undo]);
 
   return (
     <div className="app">
@@ -996,6 +1027,7 @@ export function App() {
           connecting={connect !== null}
           connectSource={connect?.source ?? null}
           highlight={matches}
+          hidden={hidden}
           onSelect={setSelection}
           onNodeTapInConnectMode={onConnectTap}
           onBackgroundDoubleTap={addNodeAt}
@@ -1039,6 +1071,15 @@ export function App() {
             >
               <span className="dot" /> <span className="sync-label">Browser storage</span>
             </div>
+          )}
+          {hidden.length > 0 && (
+            <button
+              className="hidden-count"
+              data-tip="Show the hidden nodes again (Shift+H)"
+              onClick={revealHidden}
+            >
+              <Icon name="eyeOff" /> {hidden.length} hidden
+            </button>
           )}
         </div>
 
