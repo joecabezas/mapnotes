@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { addEdge, addNode, emptyGraph, type Graph, type Position, removeEdge, removeNode } from '../shared/model';
+import { addEdge, addNode, clusterMembers, emptyGraph, type Graph, type Position, removeEdge, removeNode } from '../shared/model';
 import { formatForPath, parseGraphText, serializeGraph, serializeGraphYaml } from '../shared/yaml';
 import { GraphCanvas, type GraphCanvasHandle, type Selection } from './components/GraphCanvas';
 import { LAYOUTS, layoutLabel, type LayoutName } from './layout';
@@ -415,8 +415,21 @@ export function App() {
   const nodeSelection = (ids: string[]): Selection =>
     ids.length === 0 ? null : ids.length === 1 ? { kind: 'node', id: ids[0] } : { kind: 'nodes', ids };
 
-  // ---- Automatic layout: of the selected nodes when there are several, otherwise of the whole graph.
-  const layoutScope = selectedNodeIds.length >= 2 ? selectedNodeIds : null;
+  /** The selected nodes, with clusters swapped for their visible members: what moving them moves. */
+  const movingNodeIds = useMemo(() => {
+    if (!graph.nodes.some((n) => n.cluster && selectedNodeIds.includes(n.id))) return selectedNodeIds;
+    const isHidden = new Set(hidden);
+    const ids = selectedNodeIds.flatMap((id) => {
+      if (!graph.nodes.find((n) => n.id === id)?.cluster) return [id];
+      const members = clusterMembers(graph, id).filter((m) => !isHidden.has(m));
+      // A cluster without visible members is drawn as a node, and moves like one.
+      return members.length ? members : [id];
+    });
+    return [...new Set(ids)];
+  }, [graph, hidden, selectedNodeIds]);
+
+  // ---- Automatic layout: of the selected nodes (a cluster's members) when there are several, otherwise of the whole graph.
+  const layoutScope = movingNodeIds.length >= 2 ? movingNodeIds : null;
   /** Layout runs in flight (a newer run can start before an older one finishes). */
   const [layoutsRunning, setLayoutsRunning] = useState(0);
   const runLayout = useCallback(
@@ -776,10 +789,9 @@ export function App() {
       if (mod || e.altKey) return;
       const nudge = NUDGES[e.key];
       if (nudge) {
-        const ids = selection?.kind === 'node' ? [selection.id] : selection?.kind === 'nodes' ? selection.ids : [];
-        if (!ids.length) return;
+        if (!movingNodeIds.length) return;
         e.preventDefault();
-        const moving = new Set(ids);
+        const moving = new Set(movingNodeIds);
         const positions: Record<string, Position> = {};
         for (const n of graphRef.current.nodes) {
           if (n.position && moving.has(n.id)) positions[n.id] = { x: nextGridLine(n.position.x, nudge.x), y: nextGridLine(n.position.y, nudge.y) };
@@ -842,7 +854,7 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [addNodeInView, closeFileDrawer, connect, deleteSelection, expandSelection, fileDrawerOpen, helpOpen, hidden, hideSelection, layoutName, mcpOpen, onNodesMoved, openAction, revealHidden, redo, runLayout, save, selection, shrinkSelection, startConnect, stylesOpen, undo]);
+  }, [addNodeInView, closeFileDrawer, connect, deleteSelection, expandSelection, fileDrawerOpen, helpOpen, hidden, hideSelection, layoutName, mcpOpen, movingNodeIds, onNodesMoved, openAction, revealHidden, redo, runLayout, save, selection, shrinkSelection, startConnect, stylesOpen, undo]);
 
   return (
     <div className="app">

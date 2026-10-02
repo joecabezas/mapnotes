@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
+  clusterMembers,
   editEdge,
   editGraphProperties,
   editNode,
@@ -150,10 +151,12 @@ function StyleSelect(props: {
 function NodePanel({ node, ...p }: Props & { node: GraphNode }) {
   const connected = p.graph.edges.filter((e) => e.source === node.id || e.target === node.id);
   const labelOf = (id: string) => p.graph.nodes.find((n) => n.id === id)?.label ?? id;
+  const members = clusterMembers(p.graph, node.id);
+  const setCluster = (cluster: boolean) => p.apply((g) => editNode(g, { id: node.id, cluster }).graph);
   return (
     <>
       <header className="panel-head">
-        <span className="kind-badge">Node</span>
+        <span className={`kind-badge${node.cluster ? ' cluster' : ''}`}>{node.cluster ? 'Cluster' : 'Node'}</span>
         <h2 title={node.label}>{node.label}</h2>
       </header>
       <section>
@@ -183,6 +186,32 @@ function NodePanel({ node, ...p }: Props & { node: GraphNode }) {
           onChange={(style) => p.apply((g) => editNode(g, { id: node.id, style }).graph)}
         />
       </section>
+      {node.cluster && (
+        <section>
+          <h3>
+            Members <span className="count">{members.length}</span>
+          </h3>
+          {members.length === 0 && (
+            <p className="muted small">Nothing is connected to this cluster, so it is drawn as a node.</p>
+          )}
+          <ul className="link-list">
+            {members.map((id) => (
+              <li key={id}>
+                <button className="link" onClick={() => p.onSelect({ kind: 'node', id })} data-tip="Select node">
+                  {labelOf(id)}
+                </button>
+              </li>
+            ))}
+          </ul>
+          <button
+            className="btn small"
+            data-tip="Draw it as a node again, with its edges"
+            onClick={() => setCluster(false)}
+          >
+            Convert to node
+          </button>
+        </section>
+      )}
       <section>
         <h3>Properties</h3>
         <PropertyEditor
@@ -212,9 +241,25 @@ function NodePanel({ node, ...p }: Props & { node: GraphNode }) {
             );
           })}
         </ul>
-        <button className="btn small" onClick={() => p.onConnectFrom(node.id)} data-tip="Then click the target node (E)">
-          <Icon name="plus" /> Connect to…
-        </button>
+        <div className="row">
+          <button className="btn small" onClick={() => p.onConnectFrom(node.id)} data-tip="Then click the target node (E)">
+            <Icon name="plus" /> Connect to…
+          </button>
+          {!node.cluster && (
+            <button
+              className="btn small"
+              disabled={!members.length}
+              data-tip={
+                members.length
+                  ? `Draw this node as a zone around the ${members.length} node${members.length === 1 ? '' : 's'} connected to it, hiding its edges. Convert it back any time.`
+                  : 'Connect this node to others first: a cluster is drawn around the nodes connected to it'
+              }
+              onClick={() => setCluster(true)}
+            >
+              Convert to cluster
+            </button>
+          )}
+        </div>
       </section>
       <footer className="panel-foot">
         <button

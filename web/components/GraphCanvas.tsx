@@ -2,6 +2,7 @@ import cytoscape, { type Core, type EventObject, type NodeSingular } from 'cytos
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import type { Graph, Position } from '../../shared/model';
 import { arrange, type ArrangeOp } from '../arrange';
+import { type Box, zoneAround } from '../hull';
 import { computeLayout, type LayoutName, type LayoutResult } from '../layout';
 import { isArced } from '../layoutQuality';
 import { useIcons } from '../icons';
@@ -76,6 +77,68 @@ function updateArcs(edges: cytoscape.EdgeCollection) {
   });
 }
 
+/** Room between a cluster's members (with their labels) and its outline. */
+const CLUSTER_PAD = 16;
+
+/** The visible nodes a cluster node is drawn around (see `clusterMembers` in the model). */
+function membersOf(cluster: NodeSingular): cytoscape.NodeCollection {
+  return cluster.neighborhood('node').filter((m) => !m.data('isCluster') && !m.hasClass('hidden'));
+}
+
+/** Fits a cluster's outline around its members. */
+const visibleBox = (n: NodeSingular): Box => n.boundingBox({ includeLabels: true, includeOverlays: false });
+const boxesOverlap = (a: Box, b: Box) => a.x1 < b.x2 && b.x1 < a.x2 && a.y1 < b.y2 && b.y1 < a.y2;
+
+/**
+ * Fits a cluster's outline around its members, bending around the nodes that aren't in it. The ids
+ * of the nodes in its area are kept (scratch `zoneNear`), so it is reshaped when one of them leaves.
+ */
+function reshapeCluster(cluster: NodeSingular) {
+  const members = membersOf(cluster);
+  const others = cluster
+    .cy()
+    .nodes(':visible')
+    .filter((n) => n !== cluster && !n.hasClass('cluster') && !members.contains(n));
+  const hull = zoneAround(members.map(visibleBox), others.map(visibleBox), CLUSTER_PAD);
+  if (!hull) return;
+  if (cluster.data('hullPoints') !== hull.points || cluster.data('hullW') !== hull.width || cluster.data('hullH') !== hull.height) {
+    cluster.data({ hullPoints: hull.points, hullW: hull.width, hullH: hull.height });
+  }
+  const p = cluster.position();
+  if (p.x !== hull.center.x || p.y !== hull.center.y) cluster.position(hull.center);
+  const area = cluster.boundingBox({ includeLabels: false, includeOverlays: false });
+  cluster.scratch('zoneNear', new Set(others.filter((n) => boxesOverlap(visibleBox(n as NodeSingular), area)).map((n) => n.id())));
+}
+
+/**
+ * Draws cluster nodes that have visible members as zones around them (class `cluster`), hiding their
+ * edges; one without members is drawn as a plain node at its saved position.
+ */
+function refreshClusters(cy: Core) {
+  cy.batch(() => {
+    cy.nodes().forEach((n) => {
+      const drawn = !!n.data('isCluster') && !n.hasClass('hidden') && membersOf(n).nonempty();
+      if (drawn === n.hasClass('cluster')) return;
+      n.toggleClass('cluster', drawn);
+      const home = n.data('home') as Position | undefined;
+      if (!drawn && home) n.position({ ...home });
+    });
+    cy.edges().forEach((e) => {
+      e.toggleClass('cluster-edge', e.source().hasClass('cluster') || e.target().hasClass('cluster'));
+    });
+  });
+  cy.nodes('.cluster').forEach((n) => reshapeCluster(n));
+}
+
+/** The given nodes, with clusters swapped for their members (clusters don't keep a position of their own). */
+function withMembers(nodes: cytoscape.NodeCollection): cytoscape.NodeCollection {
+  let out = nodes.not('.cluster');
+  nodes.filter('.cluster').forEach((c) => {
+    out = out.union(membersOf(c));
+  });
+  return out;
+}
+
 /** The app-level selection matching what is selected on the canvas. */
 function selectionOf(cy: Core): Selection {
   const nodes = cy.nodes(':selected');
@@ -99,7 +162,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
 
   function reportPositions(nodes: cytoscape.NodeCollection, record: boolean) {
     const positions: Record<string, Position> = {};
-    nodes.forEach((n) => {
+    nodes.not('.cluster').forEach((n) => {
       positions[n.data('refId')] = { ...n.position() };
     });
     if (Object.keys(positions).length) latest.current.onNodesMoved(positions, record);
@@ -110,8 +173,8 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
 
   async function runLayout(name: LayoutName, ids?: string[]): Promise<LayoutResult | null> {
     const cy = cyRef.current;
-    // Hidden nodes stay where they are.
-    const visible = cy?.nodes(':visible');
+    // Hidden nodes stay where they are; clusters follow their members.
+    const visible = cy?.nodes(':visible').not('.cluster');
     if (!cy || !visible?.nonempty()) return null;
     const wanted = new Set(ids);
     const subset = wanted.size >= 2 ? visible.filter((n) => wanted.has(n.data('refId'))) : null;
@@ -160,7 +223,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
       const withLabels = op.startsWith('distribute') || op.startsWith('space');
       const items = ids
         .map((id) => cy.getElementById(nid(id)))
-        .filter((n) => n.nonempty())
+        .filter((n) => n.nonempty() && !n.hasClass('cluster'))
         .map((n) => ({
           id: n.data('refId') as string,
           position: { ...n.position() },
@@ -202,6 +265,23 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
     cy.on('dbltap', (e: EventObject) => {
       if (e.target === cy) latest.current.onBackgroundDoubleTap({ ...e.position });
     });
+    // Dragging a cluster drags its members along (except selected ones: Cytoscape already moves those
+    // when the cluster is selected too).
+    let clusterDragAt: Position | null = null;
+    cy.on('grab', 'node.cluster', (e: EventObject) => {
+      clusterDragAt = { ...(e.target as NodeSingular).position() };
+    });
+    cy.on('drag', 'node.cluster', (e: EventObject) => {
+      const cluster = e.target as NodeSingular;
+      const p = cluster.position();
+      if (!clusterDragAt) return;
+      const dx = p.x - clusterDragAt.x;
+      const dy = p.y - clusterDragAt.y;
+      clusterDragAt = { ...p };
+      membersOf(cluster)
+        .filter((m) => !m.grabbed() && !(m.selected() && cluster.selected()))
+        .forEach((m) => void m.position({ x: m.position('x') + dx, y: m.position('y') + dy }));
+    });
     // Dragging a selected node moves all selected nodes; save them together, once.
     let dragQueued = false;
     cy.on('dragfree', 'node', (e: EventObject) => {
@@ -210,10 +290,36 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
       dragQueued = true;
       queueMicrotask(() => {
         dragQueued = false;
-        reportPositions(moved.union(cy.nodes(':selected')), true);
+        clusterDragAt = null;
+        reportPositions(withMembers(moved.union(cy.nodes(':selected'))), true);
       });
     });
-    cy.on('position', 'node', (e: EventObject) => updateArcs((e.target as NodeSingular).connectedEdges()));
+    // Clusters follow their members; reshaped once per frame however many members moved.
+    const dirtyClusters = new Set<NodeSingular>();
+    let reshapeFrame = 0;
+    cy.on('position', 'node', (e: EventObject) => {
+      const node = e.target as NodeSingular;
+      updateArcs(node.connectedEdges());
+      if (node.hasClass('cluster')) return;
+      // Its own clusters, and those it moves into or out of.
+      node.neighborhood('node.cluster').forEach((c) => void dirtyClusters.add(c));
+      const clusters = cy.nodes('.cluster');
+      if (clusters.nonempty()) {
+        const box = visibleBox(node);
+        clusters.forEach((c) => {
+          const near = c.scratch('zoneNear') as Set<string> | undefined;
+          if (near?.has(node.id()) || boxesOverlap(box, c.boundingBox({ includeLabels: false, includeOverlays: false }))) {
+            dirtyClusters.add(c);
+          }
+        });
+      }
+      if (!dirtyClusters.size || reshapeFrame) return;
+      reshapeFrame = requestAnimationFrame(() => {
+        reshapeFrame = 0;
+        dirtyClusters.forEach((c) => !c.removed() && c.hasClass('cluster') && reshapeCluster(c));
+        dirtyClusters.clear();
+      });
+    });
     cy.on('add', 'edge', (e: EventObject) => updateArcs(e.target as cytoscape.EdgeCollection));
 
     cy.on('mouseover', 'node, edge', (e: EventObject) => {
@@ -245,6 +351,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
 
     return () => {
       resizeObserver.disconnect();
+      cancelAnimationFrame(reshapeFrame);
       cy.destroy();
       cyRef.current = null;
     };
@@ -253,7 +360,11 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
   // Keep the stylesheet in sync with graph styles, the theme and loaded icons.
   const icons = useIcons(props.graph.styles, CANVAS_COLORS[props.theme].node);
   useEffect(() => {
-    cyRef.current?.style(buildStylesheet(props.graph.styles, props.theme, icons));
+    const cy = cyRef.current;
+    if (!cy) return;
+    cy.style(buildStylesheet(props.graph.styles, props.theme, icons));
+    // Member sizes may have changed.
+    cy.nodes('.cluster').forEach((n) => reshapeCluster(n));
   }, [props.graph.styles, props.theme, icons]);
 
   // Diff the graph into Cytoscape.
@@ -271,12 +382,21 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
       cy.nodes().filter((n) => !nodeIds.has(n.id())).remove();
 
       for (const node of graph.nodes) {
-        const data = { id: nid(node.id), refId: node.id, label: node.label, styleId: node.style ?? '' };
+        const data = {
+          id: nid(node.id),
+          refId: node.id,
+          label: node.label,
+          styleId: node.style ?? '',
+          isCluster: !!node.cluster,
+          // Where the node goes when it stops being drawn as a cluster.
+          home: node.position,
+        };
         const ele = cy.getElementById(data.id);
         if (ele.nonempty()) {
           ele.data(data);
           const p = ele.position();
-          if (node.position && !ele.grabbed() && (p.x !== node.position.x || p.y !== node.position.y)) {
+          // A cluster's position is its outline's centre, not the saved one.
+          if (node.position && !ele.hasClass('cluster') && !ele.grabbed() && (p.x !== node.position.x || p.y !== node.position.y)) {
             ele.position(node.position);
           }
         } else {
@@ -321,6 +441,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
         const isFree = (p: Position) =>
           cy.nodes().toArray().every(
             (m) =>
+              m.hasClass('cluster') ||
               (unplacedSet.has(m.data('refId')) && !moved.contains(m)) ||
               Math.hypot((m as NodeSingular).position('x') - p.x, (m as NodeSingular).position('y') - p.y) > 70,
           );
@@ -349,6 +470,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
     } else if (wasEmpty && graph.nodes.length) {
       cy.fit(undefined, 50);
     }
+    refreshClusters(cy);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.graph]);
 
@@ -364,6 +486,8 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
         else if (n.hasClass('hidden')) n.removeClass('hidden').selectify();
       });
     });
+    // Hiding members reshapes their clusters; hiding all of them shows the cluster as a node.
+    refreshClusters(cy);
   }, [props.hidden, props.graph]);
 
   // Reflect the app's selection.

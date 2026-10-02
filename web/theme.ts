@@ -1,4 +1,4 @@
-import type { StylesheetJson } from 'cytoscape';
+import type { NodeSingular, StylesheetJson } from 'cytoscape';
 import type { ArrowShape, CurveStyle, LineStyle, NodeShape, Style } from '../shared/model';
 import { iconKey } from './icons';
 
@@ -155,6 +155,28 @@ export function buildStylesheet(styles: Style[], theme: ThemeName, icons: Record
       style: styleRules(s, icons, c.node),
     })),
     {
+      // A cluster is drawn as a zone around its members (the hull is computed in GraphCanvas),
+      // under every edge and node; it keeps its style's colours.
+      selector: 'node.cluster',
+      style: {
+        shape: 'polygon',
+        'shape-polygon-points': (n: NodeSingular) => n.data('hullPoints'),
+        width: (n: NodeSingular) => n.data('hullW'),
+        height: (n: NodeSingular) => n.data('hullH'),
+        'background-opacity': 0.14,
+        'background-image': 'none',
+        'border-opacity': 0.7,
+        'border-style': 'dashed',
+        'text-valign': 'top',
+        'text-margin-y': -4,
+        'font-size': 13,
+        'font-weight': 'bold',
+        'z-compound-depth': 'bottom',
+      },
+    },
+    // A cluster's own edges are hidden: the zone shows what it connects to.
+    { selector: 'edge.cluster-edge', style: { display: 'none' } },
+    {
       selector: 'node:selected',
       style: {
         'border-color': c.accent,
@@ -164,6 +186,8 @@ export function buildStylesheet(styles: Style[], theme: ThemeName, icons: Record
         'underlay-padding': 6,
       },
     },
+    // The glow can't follow a polygon (it would be a rectangle); the outline shows the selection.
+    { selector: 'node.cluster:selected', style: { 'underlay-opacity': 0 } },
     {
       selector: 'edge:selected',
       style: {

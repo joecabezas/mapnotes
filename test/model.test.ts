@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   addEdge,
   addNode,
+  clusterMembers,
   editEdge,
   editNode,
   emptyGraph,
@@ -260,5 +261,39 @@ describe('graph operations', () => {
     const g = removeStyle(removeStyle(sample(), 'big'), 'dashed');
     expect(g.nodes.every((n) => !('style' in n))).toBe(true);
     expect(g.edges.every((e) => !('style' in e))).toBe(true);
+  });
+});
+
+describe('clusters', () => {
+  const g = normalizeGraph({
+    nodes: [{ id: 'hub', position: { x: 5, y: 6 } }, { id: 'a' }, { id: 'b' }, { id: 'far' }, { id: 'zone', cluster: true }],
+    edges: [
+      { id: 'out', source: 'hub', target: 'a', label: 'keep me' },
+      { id: 'in', source: 'b', target: 'hub' },
+      { id: 'again', source: 'a', target: 'hub' },
+      { id: 'away', source: 'a', target: 'far' },
+      { id: 'zz', source: 'zone', target: 'hub' },
+    ],
+  });
+
+  it('reads the cluster flag from files and leaves it off other nodes', () => {
+    expect(g.nodes.find((n) => n.id === 'zone')?.cluster).toBe(true);
+    expect('cluster' in g.nodes.find((n) => n.id === 'hub')!).toBe(false);
+  });
+
+  it('takes the nodes connected in either direction as members, once each, without other clusters', () => {
+    expect(clusterMembers(g, 'hub').sort()).toEqual(['a', 'b']);
+    expect(clusterMembers(g, 'zone')).toEqual(['hub']);
+    const both = editNode(g, { id: 'hub', cluster: true }).graph;
+    expect(clusterMembers(both, 'zone')).toEqual([]);
+    expect(clusterMembers(both, 'hub').sort()).toEqual(['a', 'b']);
+  });
+
+  it('converts a node to a cluster and back without changing anything else', () => {
+    const clustered = editNode(g, { id: 'hub', cluster: true }).graph;
+    expect(clustered.nodes.find((n) => n.id === 'hub')?.cluster).toBe(true);
+    expect(clustered.edges).toEqual(g.edges);
+    const back = editNode(clustered, { id: 'hub', cluster: false }).graph;
+    expect(back).toEqual(g);
   });
 });

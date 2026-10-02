@@ -160,7 +160,8 @@ export async function computeLayout(cy: Core, nodes: NodeCollection, name: Layou
   const extents: Record<string, Extent> = {};
   const current: Record<string, Position> = {};
   // Hidden nodes (and their edges) are left out: they neither move nor count towards the quality.
-  cy.nodes(':visible').forEach((n) => {
+  // Clusters are outlines around their members, so they aren't laid out themselves (their edges are hidden).
+  cy.nodes(':visible').not('.cluster').forEach((n) => {
     const id = n.data('refId') as string;
     const p = n.position();
     const bb = n.boundingBox({ includeLabels: true, includeOverlays: false });
@@ -174,7 +175,7 @@ export async function computeLayout(cy: Core, nodes: NodeCollection, name: Layou
 
   // A headless copy where each node is a plain box the size of node + label, centred on that box.
   // It keeps the canvas's element ids (`n:` / `e:` prefixed), so nodes and edges can't clash.
-  const ids = new Set(nodes.filter((n) => n.visible()).map((n) => n.data('refId') as string));
+  const ids = new Set(nodes.filter((n) => n.visible() && !n.hasClass('cluster')).map((n) => n.data('refId') as string));
   const boxCentre = (id: string) => {
     const e = extents[id];
     return { x: current[id].x + (e.right - e.left) / 2, y: current[id].y + (e.bottom - e.top) / 2 };

@@ -131,8 +131,9 @@ function describeEdge(e: GraphEdge): string {
 function describeNode(n: GraphNode): string {
   const style = n.style ? ` [style ${n.style}]` : '';
   const pos = n.position ? ` at (${n.position.x}, ${n.position.y})` : '';
+  const cluster = n.cluster ? ' [cluster]' : '';
   const extra = n.properties.length ? ` {${props(n.properties)}}` : '';
-  return `"${n.id}" "${n.label}"${style}${pos}${extra}`;
+  return `"${n.id}" "${n.label}"${style}${cluster}${pos}${extra}`;
 }
 
 function counts(g: Graph) {
@@ -173,6 +174,7 @@ const nodeOut = z.object({
   label: z.string(),
   style: z.string().optional(),
   position: position.optional(),
+  cluster: z.boolean().optional(),
   properties: kvList,
 });
 const edgeOut = z.object({
@@ -341,6 +343,7 @@ server.registerTool(
       position: position
         .optional()
         .describe('Usually omit: the web app places new nodes next to their neighbours, and lays out graphs that have no positions at all'),
+      cluster: z.boolean().optional().describe('true draws the node as a zone (cluster) around the nodes connected to it, hiding its own edges; false draws it as a node again'),
       properties: kvList.optional(),
     },
     outputSchema: { node: nodeOut, file: fileOut },
@@ -364,6 +367,7 @@ server.registerTool(
       label: z.string().optional(),
       style: z.string().optional(),
       position: position.optional(),
+      cluster: z.boolean().optional().describe('true draws the node as a zone (cluster) around the nodes connected to it, hiding its own edges; false draws it as a node again'),
       setProperties: kvList.optional(),
       removeProperties: z.array(z.string()).optional(),
       properties: kvList.optional(),
