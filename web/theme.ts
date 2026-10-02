@@ -56,6 +56,30 @@ export const PALETTE = [
   '#f7768e', '#bb9af7', '#2ac3de', '#c0caf5', '#73daca',
 ];
 
+/**
+ * The colour of a cluster, from a hash (FNV-1a) of its label, so a name always gets the same colour:
+ * any hue, with saturation and lightness kept in a band that reads well on both themes.
+ */
+export function clusterColor(label: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < label.length; i++) h = Math.imul(h ^ label.charCodeAt(i), 0x01000193);
+  // Mix the bits (murmur3 finaliser), so labels that differ by a character land far apart.
+  h = Math.imul(h ^ (h >>> 16), 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  h = (h ^ (h >>> 16)) >>> 0;
+  const hue = h % 360;
+  const saturation = 0.6 + ((h >>> 9) % 21) / 100;
+  const lightness = 0.58 + ((h >>> 17) % 13) / 100;
+  // HSL to RGB.
+  const a = saturation * Math.min(lightness, 1 - lightness);
+  const channel = (n: number) => {
+    const k = (n + hue / 30) % 12;
+    const v = lightness - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+    return Math.round(v * 255).toString(16).padStart(2, '0');
+  };
+  return `#${channel(0)}${channel(8)}${channel(4)}`;
+}
+
 type Css = Record<string, string | number>;
 
 function styleRules(s: Style, icons: Record<string, string>, defaultFill: string): Css {
@@ -155,10 +179,13 @@ export function buildStylesheet(styles: Style[], theme: ThemeName, icons: Record
       style: styleRules(s, icons, c.node),
     })),
     {
-      // A cluster is drawn as a zone around its members (the hull is computed in GraphCanvas),
-      // under every edge and node; it keeps its style's colours.
+      // A cluster is drawn as a zone around its members (the outline is computed in GraphCanvas),
+      // under every edge and node, in its own colour (see clusterColor) whatever its style.
       selector: 'node.cluster',
       style: {
+        'background-color': 'data(zoneColor)',
+        'border-color': 'data(zoneColor)',
+        color: 'data(zoneColor)',
         shape: 'polygon',
         'shape-polygon-points': (n: NodeSingular) => n.data('hullPoints'),
         width: (n: NodeSingular) => n.data('hullW'),

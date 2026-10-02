@@ -6,7 +6,7 @@ import { type Box, zoneAround } from '../hull';
 import { computeLayout, type LayoutName, type LayoutResult } from '../layout';
 import { isArced } from '../layoutQuality';
 import { useIcons } from '../icons';
-import { buildStylesheet, CANVAS_COLORS, type ThemeName } from '../theme';
+import { buildStylesheet, CANVAS_COLORS, clusterColor, type ThemeName } from '../theme';
 
 // Nodes and edges share one id namespace in Cytoscape, so element ids are prefixed.
 const nid = (id: string) => `n:${id}`;
@@ -388,6 +388,8 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
           label: node.label,
           styleId: node.style ?? '',
           isCluster: !!node.cluster,
+          // The colour it is drawn in as a cluster.
+          zoneColor: clusterColor(node.label),
           // Where the node goes when it stops being drawn as a cluster.
           home: node.position,
         };

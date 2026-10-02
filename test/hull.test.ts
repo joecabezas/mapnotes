@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Position } from '../shared/model.ts';
+import { clusterColor } from '../web/theme.ts';
 import { type Box, convexHull, hullAround, type HullShape, insidePolygon, zoneAround } from '../web/hull.ts';
 
 const box = (x: number, y: number, size = 20): Box => ({ x1: x - size / 2, y1: y - size / 2, x2: x + size / 2, y2: y + size / 2 });
@@ -88,5 +89,23 @@ describe('zoneAround', () => {
     const pairs = zone.points.match(/\S+ \S+/g)!;
     pairs.forEach((p, i) => expect(p).not.toBe(pairs[(i + 1) % pairs.length]));
     expect(zone.points.split(' ').map(Number).every((v) => v >= -1 && v <= 1)).toBe(true);
+  });
+});
+
+describe('clusterColor', () => {
+  it('gives a name the same colour every time, and different names different colours', () => {
+    expect(clusterColor('Backend team')).toBe(clusterColor('Backend team'));
+    expect(clusterColor('Backend team')).toMatch(/^#[0-9a-f]{6}$/);
+    const names = Array.from({ length: 200 }, (_, i) => `Person ${i}`);
+    expect(new Set(names.map(clusterColor)).size).toBeGreaterThan(190);
+  });
+
+  it('keeps colours away from black and white', () => {
+    for (let i = 0; i < 500; i++) {
+      const hex = clusterColor(`n${i}`);
+      const [r, g, b] = [1, 3, 5].map((k) => parseInt(hex.slice(k, k + 2), 16));
+      expect(Math.max(r, g, b)).toBeGreaterThan(150);
+      expect(Math.min(r, g, b)).toBeLessThan(235);
+    }
   });
 });
