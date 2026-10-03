@@ -178,6 +178,10 @@ web/      React + Cytoscape.js frontend
 examples/ sample graphs
 ```
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Commits in pull requests must be signed off (`git commit -s`) under the [Developer Certificate of Origin](DCO).
+
 ## License
 
 [MIT](LICENSE)
