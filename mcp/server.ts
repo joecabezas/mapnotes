@@ -566,5 +566,23 @@ if (initial) {
   for (const issue of fileIssues) console.error(`Warning: ${currentFile}: ${issue}`);
 }
 
-await server.connect(new StdioServerTransport());
+// The SDK labels tool schemas as JSON Schema draft-07, which some clients
+// (e.g. Claude Cowork) reject: they only accept 2020-12, the MCP default. Our
+// schemas use no keywords whose meaning differs between the two dialects
+// (no tuples, no $ref/definitions), so relabelling them is enough.
+const DIALECT_2020_12 = 'https://json-schema.org/draft/2020-12/schema';
+const transport = new StdioServerTransport();
+const send = transport.send.bind(transport);
+transport.send = (message) => {
+  const tools = (message as { result?: { tools?: unknown } }).result?.tools;
+  if (Array.isArray(tools)) {
+    for (const tool of tools) {
+      for (const schema of [tool.inputSchema, tool.outputSchema]) {
+        if (schema?.$schema) schema.$schema = DIALECT_2020_12;
+      }
+    }
+  }
+  return send(message);
+};
+await server.connect(transport);
 console.error(`mapnotes MCP server ready${currentFile ? ` (file: ${currentFile})` : ''}`);
