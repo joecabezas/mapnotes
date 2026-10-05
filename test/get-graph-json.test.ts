@@ -54,4 +54,25 @@ describe('get_graph', () => {
     await call('save_graph', { path: file });
     expect(await call('get_graph', { format: 'yaml' })).toMatch(new RegExp(`^# ${file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\n`));
   });
+
+  it('includes saved views in JSON output', async () => {
+    const file = path.join(dir, 'views.yaml');
+    await call('save_graph', {
+      path: file,
+    });
+    await call('load_graph', { path: file });
+    const yaml = `views:
+  - id: v1
+    name: People
+    filters:
+      types: [person]
+nodes:
+  - id: a
+    label: A
+`;
+    await fs.writeFile(file, yaml);
+    await call('load_graph', { path: file });
+    const parsed = JSON.parse(await call('get_graph', { format: 'json' }));
+    expect(parsed.views[0].name).toBe('People');
+  });
 });

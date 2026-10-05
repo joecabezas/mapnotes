@@ -43,6 +43,25 @@ Every push to `master` is built and published to GitHub Pages by `.github/workfl
 | Open / save | `Ctrl+O` / `Ctrl+S` (saves to the open file; **Download** in Firefox/Safari); Save as, JSON and PNG in the ▾ menu |
 | Help | `?` |
 
+### Filters and saved views
+
+Use **Filters** to narrow the canvas by entity type, node style, text, exact properties, proximity to a node (1–3 hops), and edge labels. **Apply filters** for a temporary view, or name and **Save view** to keep it. Switch views from the dropdown; **All nodes** shows the full graph.
+
+Each saved view remembers its own node positions (drag and layout changes). Edits to nodes, edges and properties always affect the shared graph. Search, selection and layout work on visible nodes. YAML/JSON saves include the full graph; PNG exports show what's on screen.
+
+Views live under an optional top-level `views` field:
+
+```yaml
+views:
+  - id: people-prs
+    name: People & PRs
+    filters:
+      types: [person, pr]
+      edgeLabels: [authors]
+    positions:
+      alice: { x: 0, y: 0 }
+```
+
 ### Icons
 
 Node styles can show an icon inside the node, from two open icon sets. Both are fetched at runtime from jsDelivr, so nothing is stored in this repo. The canvas needs network access to show them; if an icon can't be loaded, the node is simply drawn without it.

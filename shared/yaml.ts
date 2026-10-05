@@ -12,12 +12,19 @@ export function parseGraphYaml(text: string, issues?: string[]): Graph {
   return normalizeGraph(data, issues);
 }
 
+function roundPos(p: { x: number; y: number }) {
+  return { x: Math.round(p.x), y: Math.round(p.y) };
+}
+
 // Round positions so dragging does not produce noisy diffs.
 function roundPositions(graph: Graph): Graph {
   return {
     ...graph,
-    nodes: graph.nodes.map((n) =>
-      n.position ? { ...n, position: { x: Math.round(n.position.x), y: Math.round(n.position.y) } } : n,
+    nodes: graph.nodes.map((n) => (n.position ? { ...n, position: roundPos(n.position) } : n)),
+    views: graph.views?.map((v) =>
+      v.positions
+        ? { ...v, positions: Object.fromEntries(Object.entries(v.positions).map(([id, p]) => [id, roundPos(p)])) }
+        : v,
     ),
   };
 }
