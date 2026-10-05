@@ -1383,3 +1383,61 @@ button.sync.error {
 .link .toolbar-icon {
   vertical-align: -2px;
 }
+
+/* ---------- Filter views ---------- */
+
+.view-select {
+  max-width: 160px;
+}
+.filter-views-body {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.filter-views-foot {
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-end;
+}
+.filter-views-foot .grow {
+  flex: 1;
+  min-width: 140px;
+}
+.filter-pick {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 0;
+}
+.filter-pick legend {
+  padding: 0 4px;
+  font-size: 13px;
+}
+.filter-pick-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 8px;
+  max-height: 120px;
+  overflow: auto;
+}
+.filter-scope {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+}
+.filter-property-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.filter-preview {
+  margin: 0;
+}
+.filtered-empty {
+  z-index: 2;
+}

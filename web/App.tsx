@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { addEdge, addNode, clusterMembers, emptyGraph, type Graph, type Position, removeEdge, removeNode } from '../shared/model';
+import { criteriaIsEmpty, projectGraph, storeNodePositions, type ViewCriteria } from '../shared/filterViews';
+import { addEdge, addNode, clusterMembers, emptyGraph, type Graph, type Position, removeEdge, removeNode, uniqueId } from '../shared/model';
 import { formatForPath, parseGraphText, serializeGraph, serializeGraphYaml } from '../shared/yaml';
 import { GraphCanvas, type GraphCanvasHandle, type Selection } from './components/GraphCanvas';
 import { LAYOUTS, layoutLabel, type LayoutName } from './layout';
@@ -21,6 +22,7 @@ import { createFilePoll } from './filePoll';
 import { writeFileText as writeTracked, writeFileTextIfUnchanged as writeTrackedIfUnchanged } from './fileSync';
 import type { ThemeName } from './theme';
 import logoUrl from './logo.svg';
+import { FilterViewsDialog } from './components/FilterViewsDialog';
 import { Icon } from './components/Icon';
 
 const LOCAL_KEY = 'mapnotes:graph';
@@ -111,7 +113,7 @@ function storageRemove(key: string) {
 }
 
 function isEmptyGraph(g: Graph): boolean {
-  return !g.nodes.length && !g.edges.length && !g.styles.length && !g.properties.length;
+  return !g.nodes.length && !g.edges.length && !g.styles.length && !g.properties.length && !g.views?.length;
 }
 
 function download(name: string, href: string) {
@@ -170,6 +172,20 @@ export function App() {
   const [mcpOpen, setMcpOpen] = useState(false);
   const [fileDrawerOpen, setFileDrawerOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [filterDialogOpen, setFilterDialogOpen] = useState(false);
+  const [activeViewId, setActiveViewId] = useState('');
+  const [previewCriteria, setPreviewCriteria] = useState<ViewCriteria | null>(null);
+  const [previewLayout, setPreviewLayout] = useState<Record<string, Position>>({});
+  const activeView = graph.views?.find((v) => v.id === activeViewId);
+  const effectiveCriteria = previewCriteria ?? activeView?.filters ?? {};
+  const effectiveLayout = previewCriteria ? previewLayout : activeView?.positions;
+  const filtering = !criteriaIsEmpty(effectiveCriteria);
+  const visibleGraph = useMemo(
+    () => (filtering ? projectGraph(graph, effectiveCriteria, effectiveLayout) : graph),
+    [graph, filtering, effectiveCriteria, effectiveLayout, previewLayout],
+  );
+  const visibleRef = useRef(visibleGraph);
+  visibleRef.current = visibleGraph;
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [issues, setIssues] = useState<Issues | null>(null);
   const [layoutName, setLayoutName] = useState<LayoutName>('auto');
@@ -237,12 +253,22 @@ export function App() {
     setHist((h) => (h.future.length ? { ...h.future[0], past: [...h.past, snapshot(h)], future: h.future.slice(1), lastAt: 0 } : h));
   }, []);
 
-  /** Replaces the graph and clears undo history, without writing it back to the file. */
-  const resetGraph = useCallback((next: Graph) => {
-    skipSave.current = true;
-    graphRef.current = next;
-    setHist({ graph: next, hidden: [], past: [], future: [], lastAt: 0 });
+  const clearViewUi = useCallback(() => {
+    setActiveViewId('');
+    setPreviewCriteria(null);
+    setPreviewLayout({});
   }, []);
+
+  /** Replaces the graph and clears undo history, without writing it back to the file. */
+  const resetGraph = useCallback(
+    (next: Graph) => {
+      skipSave.current = true;
+      graphRef.current = next;
+      clearViewUi();
+      setHist({ graph: next, hidden: [], past: [], future: [], lastAt: 0 });
+    },
+    [clearViewUi],
+  );
 
   /** Reads the linked file into the canvas. `fresh` (a newly opened file) also clears undo history. */
   const loadFromFile = useCallback(
@@ -415,18 +441,79 @@ export function App() {
   const nodeSelection = (ids: string[]): Selection =>
     ids.length === 0 ? null : ids.length === 1 ? { kind: 'node', id: ids[0] } : { kind: 'nodes', ids };
 
+  useEffect(() => {
+    const ids = new Set(visibleGraph.nodes.map((n) => n.id));
+    setSelection((current) => {
+      if (!current) return current;
+      if (current.kind === 'node') return ids.has(current.id) ? current : null;
+      if (current.kind === 'edge') return visibleGraph.edges.some((e) => e.id === current.id) ? current : null;
+      if (current.kind !== 'nodes') return current;
+      const kept = current.ids.filter((id) => ids.has(id));
+      return kept.length === current.ids.length ? current : nodeSelection(kept);
+    });
+    setConnect((current) => (current?.source && !ids.has(current.source) ? null : current));
+  }, [visibleGraph]);
+
+  useEffect(() => {
+    if (activeViewId && !activeView) setActiveViewId('');
+  }, [activeView, activeViewId]);
+
+  const switchView = useCallback((id: string) => {
+    setActiveViewId(id);
+    setPreviewCriteria(null);
+    setPreviewLayout({});
+    setSelection(null);
+    setConnect(null);
+    setExpansions([]);
+    requestAnimationFrame(() => canvas.current?.fit());
+  }, []);
+
+  const saveView = useCallback(
+    (name: string, criteria: ViewCriteria, replace: boolean) => {
+      const id =
+        replace && activeView
+          ? activeView.id
+          : uniqueId(
+              'view',
+              (graphRef.current.views ?? []).map((v) => v.id),
+            );
+      const positions = {
+        ...activeView?.positions,
+        ...Object.fromEntries(visibleRef.current.nodes.filter((n) => n.position).map((n) => [n.id, n.position!])),
+      };
+      if (
+        !apply((g) => ({
+          ...g,
+          views: [...(g.views ?? []).filter((v) => v.id !== id), { id, name, filters: structuredClone(criteria), positions }],
+        }))
+      )
+        return;
+      switchView(id);
+      setFilterDialogOpen(false);
+      toast(`Saved view “${name}”`);
+    },
+    [activeView, apply, switchView, toast],
+  );
+
+  const deleteView = useCallback(() => {
+    if (!activeView || !apply((g) => ({ ...g, views: (g.views ?? []).filter((v) => v.id !== activeView.id) }))) return;
+    switchView('');
+    setFilterDialogOpen(false);
+    toast(`Deleted view “${activeView.name}”`);
+  }, [activeView, apply, switchView, toast]);
+
   /** The selected nodes, with clusters swapped for their visible members: what moving them moves. */
   const movingNodeIds = useMemo(() => {
-    if (!graph.nodes.some((n) => n.cluster && selectedNodeIds.includes(n.id))) return selectedNodeIds;
+    if (!visibleGraph.nodes.some((n) => n.cluster && selectedNodeIds.includes(n.id))) return selectedNodeIds;
     const isHidden = new Set(hidden);
     const ids = selectedNodeIds.flatMap((id) => {
-      if (!graph.nodes.find((n) => n.id === id)?.cluster) return [id];
-      const members = clusterMembers(graph, id).filter((m) => !isHidden.has(m));
+      if (!visibleGraph.nodes.find((n) => n.id === id)?.cluster) return [id];
+      const members = clusterMembers(visibleGraph, id).filter((m) => !isHidden.has(m));
       // A cluster without visible members is drawn as a node, and moves like one.
       return members.length ? members : [id];
     });
     return [...new Set(ids)];
-  }, [graph, hidden, selectedNodeIds]);
+  }, [visibleGraph, hidden, selectedNodeIds]);
 
   // ---- Automatic layout: of the selected nodes (a cluster's members) when there are several, otherwise of the whole graph.
   const layoutScope = movingNodeIds.length >= 2 ? movingNodeIds : null;
@@ -459,18 +546,19 @@ export function App() {
 
   const canExpand = useMemo(() => {
     const skip = new Set([...selectedNodeIds, ...hidden]);
-    return graph.edges.some((e) => skip.has(e.source) && !skip.has(e.target));
-  }, [graph.edges, hidden, selectedNodeIds]);
+    const sel = new Set(selectedNodeIds);
+    return visibleGraph.edges.some((e) => sel.has(e.source) && !skip.has(e.target));
+  }, [visibleGraph.edges, hidden, selectedNodeIds]);
 
   const expandSelection = useCallback(() => {
     const sel = new Set(selectedNodeIds);
     const skip = new Set([...selectedNodeIds, ...hidden]);
-    const added = graph.edges.filter((e) => sel.has(e.source) && !skip.has(e.target)).map((e) => e.target);
+    const added = visibleGraph.edges.filter((e) => sel.has(e.source) && !skip.has(e.target)).map((e) => e.target);
     if (!added.length) return;
     const after = [...selectedNodeIds, ...new Set(added)];
     setExpansions((stack) => [...(lastExpansion ? stack : []), { before: selection, after }]);
     setSelection(nodeSelection(after));
-  }, [graph.edges, lastExpansion, selectedNodeIds, selection]);
+  }, [visibleGraph.edges, lastExpansion, selectedNodeIds, selection]);
 
   const shrinkSelection = useCallback(() => {
     if (!lastExpansion) return;
@@ -546,6 +634,7 @@ export function App() {
       try {
         const list: string[] = [];
         const next = parseGraphText(await file.text(), list);
+        clearViewUi();
         setGraph(next);
         setSelection(null);
         setIssues(list.length ? { source: file.name, list } : null);
@@ -555,7 +644,7 @@ export function App() {
         toast(`Could not open ${file.name}: ${(err as Error).message}`, 'error');
       }
     },
-    [setGraph, toast],
+    [clearViewUi, setGraph, toast],
   );
 
   /** Stops writing to the linked file; the graph stays in the browser. */
@@ -698,9 +787,10 @@ export function App() {
   const newGraph = useCallback(() => {
     if (graphRef.current.nodes.length && !confirm('Start a new, empty graph? (You can undo this.)')) return;
     closeFile();
+    clearViewUi();
     setGraph(emptyGraph());
     setSelection(null);
-  }, [closeFile, setGraph]);
+  }, [clearViewUi, closeFile, setGraph]);
 
   /** Erases the graph kept in this browser's local storage; there is no undo. */
   const deleteBrowserCopy = useCallback(() => {
@@ -727,19 +817,20 @@ export function App() {
 
   const onNodesMoved = useCallback(
     (positions: Record<string, Position>, record: boolean) => {
-      apply(
-        (g) => ({ ...g, nodes: g.nodes.map((n) => (positions[n.id] ? { ...n, position: positions[n.id] } : n)) }),
-        record,
-      );
+      if (previewCriteria) {
+        setPreviewLayout((prev) => ({ ...prev, ...positions }));
+        return;
+      }
+      apply((g) => storeNodePositions(g, positions, activeView?.id), record);
     },
-    [apply],
+    [activeView?.id, apply, previewCriteria],
   );
 
   // ---- Search.
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return null;
-    return graph.nodes
+    return visibleGraph.nodes
       .filter(
         (n) =>
           n.label.toLowerCase().includes(q) ||
@@ -747,7 +838,7 @@ export function App() {
           n.properties.some((p) => p.value.toLowerCase().includes(q) || p.key.toLowerCase().includes(q)),
       )
       .map((n) => n.id);
-  }, [graph.nodes, query]);
+  }, [visibleGraph.nodes, query]);
 
   // ---- Keyboard shortcuts.
   useEffect(() => {
@@ -782,7 +873,7 @@ export function App() {
       if (mod && e.key.toLowerCase() === 'a') {
         e.preventDefault();
         const hiddenSet = new Set(hidden);
-        const ids = graphRef.current.nodes.map((n) => n.id).filter((id) => !hiddenSet.has(id));
+        const ids = visibleRef.current.nodes.map((n) => n.id).filter((id) => !hiddenSet.has(id));
         setSelection(ids.length ? { kind: 'nodes', ids } : null);
         return;
       }
@@ -821,7 +912,8 @@ export function App() {
           deleteSelection();
           break;
         case 'Escape':
-          if (stylesOpen) setStylesOpen(false);
+          if (filterDialogOpen) setFilterDialogOpen(false);
+          else if (stylesOpen) setStylesOpen(false);
           else if (helpOpen) setHelpOpen(false);
           else if (mcpOpen) setMcpOpen(false);
           else if (connect) setConnect(null);
@@ -854,7 +946,7 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [addNodeInView, closeFileDrawer, connect, deleteSelection, expandSelection, fileDrawerOpen, helpOpen, hidden, hideSelection, layoutName, mcpOpen, movingNodeIds, onNodesMoved, openAction, revealHidden, redo, runLayout, save, selection, shrinkSelection, startConnect, stylesOpen, undo]);
+  }, [addNodeInView, closeFileDrawer, connect, deleteSelection, expandSelection, fileDrawerOpen, filterDialogOpen, helpOpen, hidden, hideSelection, layoutName, mcpOpen, movingNodeIds, onNodesMoved, openAction, revealHidden, redo, runLayout, save, selection, shrinkSelection, startConnect, stylesOpen, undo]);
 
   return (
     <div className="app">
@@ -927,6 +1019,26 @@ export function App() {
         </div>
 
         <div className="toolbar-view">
+          <select
+            className="view-select"
+            value={activeViewId}
+            aria-label="Saved view"
+            onChange={(e) => switchView(e.target.value)}
+          >
+            <option value="">All nodes</option>
+            {(graph.views ?? []).map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.name}
+              </option>
+            ))}
+          </select>
+          <button
+            className={`btn ghost${filtering ? ' active' : ''}`}
+            data-tip="Filter the canvas or manage saved views"
+            onClick={() => setFilterDialogOpen(true)}
+          >
+            Filters
+          </button>
           <select
             value={layoutName}
             data-tip={layoutScope ? `Automatic layout for the ${layoutScope.length} selected nodes` : 'Automatic layout for the whole graph (select nodes to lay out just those)'}
@@ -1085,7 +1197,7 @@ export function App() {
       <main className="main" style={{ '--inspector-width': `${Math.min(panelWidth, panelMax)}px` } as React.CSSProperties}>
         <GraphCanvas
           ref={canvas}
-          graph={graph}
+          graph={visibleGraph}
           theme={theme}
           selection={selection}
           connecting={connect !== null}
@@ -1224,6 +1336,21 @@ export function App() {
           </div>
         )}
 
+        {loaded && graph.nodes.length > 0 && filtering && visibleGraph.nodes.length === 0 && (
+          <div className="empty filtered-empty">
+            <h2>No nodes match this view</h2>
+            <p>Adjust the filters or switch back to all nodes.</p>
+            <div className="row center">
+              <button className="btn" onClick={() => setFilterDialogOpen(true)}>
+                Edit filters
+              </button>
+              <button className="btn ghost" onClick={() => switchView('')}>
+                Show all nodes
+              </button>
+            </div>
+          </div>
+        )}
+
         {loaded && graph.nodes.length === 0 && (
           <div className="empty">
             <h2>Your graph is empty</h2>
@@ -1288,6 +1415,24 @@ export function App() {
         />
       )}
       {mcpOpen && <McpDialog onClose={() => setMcpOpen(false)} />}
+      {filterDialogOpen && (
+        <FilterViewsDialog
+          graph={graph}
+          criteria={effectiveCriteria}
+          editing={activeView}
+          onApply={(criteria) => {
+            setPreviewCriteria(criteria);
+            setPreviewLayout({});
+            setActiveViewId('');
+            setFilterDialogOpen(false);
+            setSelection(null);
+            requestAnimationFrame(() => canvas.current?.fit());
+          }}
+          onSave={saveView}
+          onDelete={deleteView}
+          onClose={() => setFilterDialogOpen(false)}
+        />
+      )}
 
       <div className="toasts" aria-live="polite">
         {toasts.map((t) => (

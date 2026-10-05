@@ -1,4 +1,8 @@
+import { parseSavedViews, viewsAfterNodeRemoval, viewsAfterNodeRename, type SavedView } from './filterViews';
+
 // Core data model shared by the web app, the dev file API and the MCP server.
+
+export type { SavedView, ViewCriteria } from './filterViews';
 
 export interface KeyValue {
   key: string;
@@ -112,6 +116,8 @@ export const STYLE_LIMITS = {
 } as const;
 
 export interface Graph {
+  /** Named filters with optional per-view layouts; nodes and edges stay shared. */
+  views?: SavedView[];
   properties: GraphProperty[];
   styles: Style[];
   nodes: GraphNode[];
@@ -236,6 +242,8 @@ export function normalizeGraph(input: unknown, issues?: string[]): Graph {
     nodes: [],
     edges: [],
   };
+
+  if (input.views !== undefined) graph.views = parseSavedViews(input.views, issues);
 
   const seenStyles = new Set<string>();
   section(input, 'styles', issues).forEach((raw, i) => {
@@ -429,6 +437,7 @@ export function editNode(g: Graph, input: EditNodeInput): { graph: Graph; node: 
     graph: {
       ...g,
       nodes: g.nodes.map((n) => (n.id === old.id ? node : n)),
+      ...(renamed && g.views ? { views: viewsAfterNodeRename(g.views, old.id, node.id) } : {}),
       edges: renamed
         ? g.edges.map((e) => ({
             ...e,
@@ -448,6 +457,7 @@ export function removeNode(g: Graph, id: string): { graph: Graph; removedEdges: 
     graph: {
       ...g,
       nodes: g.nodes.filter((n) => n.id !== id),
+      ...(g.views ? { views: viewsAfterNodeRemoval(g.views, id) } : {}),
       edges: g.edges.filter((e) => !removedEdges.includes(e.id)),
     },
     removedEdges,
