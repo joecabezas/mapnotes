@@ -181,7 +181,10 @@ export function App() {
   const effectiveLayout = previewCriteria ? previewLayout : activeView?.positions;
   const filtering = !criteriaIsEmpty(effectiveCriteria);
   const visibleGraph = useMemo(
-    () => (filtering ? projectGraph(graph, effectiveCriteria, effectiveLayout) : graph),
+    () =>
+      filtering || effectiveLayout !== undefined
+        ? projectGraph(graph, effectiveCriteria, effectiveLayout)
+        : graph,
     [graph, filtering, effectiveCriteria, effectiveLayout, previewLayout],
   );
   const visibleRef = useRef(visibleGraph);
@@ -884,7 +887,7 @@ export function App() {
         e.preventDefault();
         const moving = new Set(movingNodeIds);
         const positions: Record<string, Position> = {};
-        for (const n of graphRef.current.nodes) {
+        for (const n of visibleRef.current.nodes) {
           if (n.position && moving.has(n.id)) positions[n.id] = { x: nextGridLine(n.position.x, nudge.x), y: nextGridLine(n.position.y, nudge.y) };
         }
         onNodesMoved(positions, true);

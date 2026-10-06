@@ -65,6 +65,13 @@ export function FilterViewsDialog({ graph, criteria: initial, editing, onApply, 
   const [name, setName] = useState(editing?.name ?? '');
   const patch = (part: Partial<ViewCriteria>) => setCriteria((c) => ({ ...c, ...part }));
 
+  const cleaned = (): ViewCriteria => {
+    const c = structuredClone(criteria);
+    const props = c.properties?.filter((p) => p.key.trim());
+    c.properties = props?.length ? props : undefined;
+    return c;
+  };
+
   const typeOptions = useMemo(() => {
     const kinds = uniqueStrings([...graph.nodes.map(inferNodeKind), ...(criteria.types ?? [])]);
     return kinds.map((value) => ({ value, label: value }));
@@ -83,7 +90,7 @@ export function FilterViewsDialog({ graph, criteria: initial, editing, onApply, 
     return labels.map((value) => ({ value, label: value || '(unlabeled)' }));
   }, [graph.edges, criteria.edgeLabels]);
 
-  const preview = projectGraph(graph, criteria);
+  const preview = projectGraph(graph, cleaned());
   const propertyRows = criteria.properties ?? [];
 
   return (
@@ -213,7 +220,7 @@ export function FilterViewsDialog({ graph, criteria: initial, editing, onApply, 
         </div>
 
         <footer className="filter-views-foot row">
-          <button type="button" className="btn" onClick={() => onApply(structuredClone(criteria))}>
+          <button type="button" className="btn" onClick={() => onApply(cleaned())}>
             Apply filters
           </button>
           <label className="field grow">
@@ -224,7 +231,7 @@ export function FilterViewsDialog({ graph, criteria: initial, editing, onApply, 
             type="button"
             className="btn primary"
             disabled={!name.trim()}
-            onClick={() => onSave(name.trim(), structuredClone(criteria), !!editing)}
+            onClick={() => onSave(name.trim(), cleaned(), !!editing)}
           >
             {editing ? 'Update view' : 'Save view'}
           </button>

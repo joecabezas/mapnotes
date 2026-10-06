@@ -200,10 +200,12 @@ export function viewsAfterNodeRemoval(views: SavedView[], id: string): SavedView
   return views.map((v) => {
     const positions = v.positions ? { ...v.positions } : undefined;
     if (positions) delete positions[id];
-    const relatedTo = v.filters.relatedTo?.filter((root) => root !== id);
     return {
       ...v,
-      filters: relatedTo ? { ...v.filters, relatedTo: relatedTo.length ? relatedTo : undefined } : v.filters,
+      filters:
+        v.filters.relatedTo !== undefined
+          ? { ...v.filters, relatedTo: v.filters.relatedTo.filter((root) => root !== id) }
+          : v.filters,
       ...(positions ? { positions } : {}),
     };
   });
