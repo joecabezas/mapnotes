@@ -72,6 +72,13 @@ describe('projectGraph', () => {
     expect(g.nodes.find((n) => n.id === 'alice')?.position).toBeUndefined();
   });
 
+  it('applies a saved layout even when filter criteria are empty', () => {
+    const g = sampleGraph();
+    const visible = projectGraph(g, {}, { alice: { x: 42, y: 24 } });
+    expect(visible.nodes.find((n) => n.id === 'alice')?.position).toEqual({ x: 42, y: 24 });
+    expect(visible.nodes).toHaveLength(g.nodes.length);
+  });
+
   it('treats an empty type list as matching nothing', () => {
     const g = sampleGraph();
     expect(projectGraph(g, { types: [] }).nodes).toEqual([]);
@@ -117,11 +124,18 @@ describe('view maintenance on node edits', () => {
   });
 
   it('removes layout keys and proximity seeds when a node is deleted', () => {
-    let g = sampleGraph();
+    let g = normalizeGraph({
+      nodes: [{ id: 'alice' }, { id: 'bob' }, { id: 'pr-1' }],
+      edges: [{ id: 'e1', source: 'alice', target: 'pr-1' }],
+      views: [{ id: 'near', name: 'Near alice', filters: { relatedTo: ['alice'] }, positions: { alice: { x: 10, y: 20 } } }],
+    });
     g = editNode(g, { id: 'alice', newId: 'ann' }).graph;
     expect(g.views?.[0].positions?.ann).toEqual({ x: 10, y: 20 });
+    expect(g.views?.[0].filters.relatedTo).toEqual(['ann']);
     g = removeNode(g, 'ann').graph;
     expect(g.views?.[0].positions?.ann).toBeUndefined();
+    expect(g.views?.[0].filters.relatedTo).toEqual([]);
+    expect(projectGraph(g, g.views![0].filters).nodes).toEqual([]);
   });
 });
 
