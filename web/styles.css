@@ -1386,12 +1386,12 @@ button.sync.error {
 
 /* ---------- Filter views ---------- */
 
-.views-menu {
+.toolbar-menu {
   position: relative;
   display: flex;
   align-items: center;
 }
-.views-menu > .btn.active:has(+ .views-clear) {
+.toolbar-menu > .btn.active:has(+ .views-clear) {
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
 }
@@ -1405,7 +1405,7 @@ button.sync.error {
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
 }
-.views-panel {
+.toolbar-panel {
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
@@ -1419,7 +1419,7 @@ button.sync.error {
   box-shadow: 0 6px 20px rgb(0 0 0 / 0.18);
   z-index: 20;
 }
-.views-panel select {
+.toolbar-panel select {
   width: min(240px, 60vw);
 }
 .view-count {

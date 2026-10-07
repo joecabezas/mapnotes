@@ -148,6 +148,30 @@ function isTyping(e: KeyboardEvent) {
   return t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName);
 }
 
+/** Closes a toolbar panel on a click outside it or Escape, like a menu. */
+function useDismiss(open: boolean, menu: React.RefObject<HTMLElement | null>, close: () => void) {
+  const closeRef = useRef(close);
+  closeRef.current = close;
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!menu.current?.contains(e.target as Node)) closeRef.current();
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      // Escape only closes the panel: it must not also reach the shortcuts that clear the selection.
+      e.stopPropagation();
+      closeRef.current();
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open, menu]);
+}
+
 export function App() {
   const [hist, setHist] = useState<History>({ graph: emptyGraph(), hidden: [], past: [], future: [], lastAt: 0 });
   const graph = hist.graph;
@@ -176,6 +200,8 @@ export function App() {
   const [viewDialog, setViewDialog] = useState<'create' | 'edit' | null>(null);
   const [viewsMenuOpen, setViewsMenuOpen] = useState(false);
   const viewsMenu = useRef<HTMLDivElement>(null);
+  const [layoutMenuOpen, setLayoutMenuOpen] = useState(false);
+  const layoutMenu = useRef<HTMLDivElement>(null);
   const [activeViewId, setActiveViewId] = useState('');
   /** Counts view switches, so that saving a view's new filter is animated like switching to it. */
   const [viewSwitches, setViewSwitches] = useState(0);
@@ -465,25 +491,8 @@ export function App() {
     if (activeViewId && !activeView) setActiveViewId('');
   }, [activeView, activeViewId]);
 
-  // The views panel closes on a click outside it or Escape, like a menu.
-  useEffect(() => {
-    if (!viewsMenuOpen) return;
-    const onPointerDown = (e: PointerEvent) => {
-      if (!viewsMenu.current?.contains(e.target as Node)) setViewsMenuOpen(false);
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      // Escape only closes the panel: it must not also reach the shortcuts that clear the selection.
-      e.stopPropagation();
-      setViewsMenuOpen(false);
-    };
-    document.addEventListener('pointerdown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown);
-      document.removeEventListener('keydown', onKeyDown);
-    };
-  }, [viewsMenuOpen]);
+  useDismiss(viewsMenuOpen, viewsMenu, () => setViewsMenuOpen(false));
+  useDismiss(layoutMenuOpen, layoutMenu, () => setLayoutMenuOpen(false));
 
   const switchView = useCallback((id: string) => {
     // Before the view changes, so the floating nodes are saved in the view they were floating in.
@@ -1061,30 +1070,51 @@ export function App() {
         </div>
 
         <div className="toolbar-view">
-          <select
-            value={layoutName}
-            data-tip={layoutScope ? `Automatic layout for the ${layoutScope.length} selected nodes` : 'Automatic layout for the whole graph (select nodes to lay out just those)'}
-            aria-label="Layout algorithm"
-            disabled={floating}
-            onChange={(e) => {
-              const name = e.target.value as LayoutName;
-              setLayoutName(name);
-              void runLayout(name);
-            }}
-          >
-            {LAYOUTS.map((l) => <option key={l.name} value={l.name}>{l.label}</option>)}
-          </select>
-          <button
-            className={`btn ghost icon${layoutScope ? ' scoped' : ''}${layoutsRunning ? ' busy' : ''}`}
-            disabled={layoutsRunning > 0 || floating}
-            data-tip={layoutScope ? `Run the layout on the ${layoutScope.length} selected nodes (L)` : 'Run the layout on the whole graph (L)'}
-            aria-label={layoutScope ? 'Run layout on selected nodes' : 'Run layout again'}
-            onClick={() => void runLayout(layoutName)}
-          >
-            <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8M21 3v5h-5M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16M8 16H3v5" />
-            </svg>
-          </button>
+          <div className="toolbar-menu" ref={layoutMenu}>
+            <button
+              className={`btn${layoutScope ? ' scoped' : ''}`}
+              disabled={floating}
+              data-tip={layoutScope ? `Arrange the ${layoutScope.length} selected nodes automatically` : 'Arrange the graph automatically (select nodes to arrange just those)'}
+              aria-expanded={layoutMenuOpen}
+              aria-controls="layout-panel"
+              onClick={() => setLayoutMenuOpen((open) => !open)}
+            >
+              <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <rect x="16" y="16" width="6" height="6" rx="1" />
+                <rect x="2" y="16" width="6" height="6" rx="1" />
+                <rect x="9" y="2" width="6" height="6" rx="1" />
+                <path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3M12 12V8" />
+              </svg>
+              Layout
+            </button>
+            {layoutMenuOpen && !floating && (
+              <div id="layout-panel" className="toolbar-panel">
+                <select
+                  value={layoutName}
+                  aria-label="Layout algorithm"
+                  onChange={(e) => {
+                    const name = e.target.value as LayoutName;
+                    setLayoutName(name);
+                    void runLayout(name);
+                  }}
+                >
+                  {LAYOUTS.map((l) => <option key={l.name} value={l.name}>{l.label}</option>)}
+                </select>
+                <button
+                  className={`btn ghost icon${layoutsRunning ? ' busy' : ''}`}
+                  disabled={layoutsRunning > 0}
+                  data-tip="Run it again (L)"
+                  aria-label={layoutScope ? 'Run layout on selected nodes' : 'Run layout again'}
+                  onClick={() => void runLayout(layoutName)}
+                >
+                  <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8M21 3v5h-5M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16M8 16H3v5" />
+                  </svg>
+                </button>
+                <span className="view-count">{layoutScope ? `${layoutScope.length} selected nodes` : 'Whole graph'}</span>
+              </div>
+            )}
+          </div>
           <button
             className={`btn ghost icon${floating ? ' active' : layoutScope ? ' scoped' : ''}`}
             aria-pressed={floating}
@@ -1117,7 +1147,7 @@ export function App() {
             </svg>
             Styles
           </button>
-          <div className="views-menu" ref={viewsMenu}>
+          <div className="toolbar-menu" ref={viewsMenu}>
             <button
               className={`btn${activeView ? ' active' : ''}`}
               data-tip={activeView ? `Showing view “${activeView.name}”` : 'Switch, create or edit saved views'}
@@ -1138,7 +1168,7 @@ export function App() {
               </button>
             )}
             {viewsMenuOpen && (
-              <div id="views-panel" className="views-panel">
+              <div id="views-panel" className="toolbar-panel">
                 <select aria-label="Saved view" value={activeView?.id ?? ''} onChange={(e) => switchView(e.target.value)}>
                   <option value="" disabled>
                     {graph.views?.length ? 'Choose a view…' : 'No saved views'}
