@@ -1107,7 +1107,7 @@ export function App() {
               <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" />
             </svg>
           </button>
-          <button className="btn ghost" data-tip="Colors, shapes, sizes and line styles" onClick={() => { setStylesInitialId(undefined); setStylesOpen(true); }}>
+          <button className="btn" data-tip="Colors, shapes, sizes and line styles" onClick={() => { setStylesInitialId(undefined); setStylesOpen(true); }}>
             <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z" />
               <circle cx="13.5" cy="6.5" r=".5" />
@@ -1119,16 +1119,21 @@ export function App() {
           </button>
           <div className="views-menu" ref={viewsMenu}>
             <button
-              className={`btn ghost${activeView ? ' active' : ''}`}
+              className={`btn${activeView ? ' active' : ''}`}
               data-tip={activeView ? `Showing view “${activeView.name}”` : 'Switch, create or edit saved views'}
               aria-expanded={viewsMenuOpen}
               aria-controls="views-panel"
               onClick={() => setViewsMenuOpen((open) => !open)}
             >
+              <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z" />
+                <path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65" />
+                <path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65" />
+              </svg>
               Views
             </button>
             {activeView && (
-              <button className="btn ghost icon views-clear" data-tip="Show all nodes" aria-label="Show all nodes" onClick={() => switchView('')}>
+              <button className="btn icon views-clear" data-tip="Show all nodes" aria-label="Show all nodes" onClick={() => switchView('')}>
                 <Icon name="close" />
               </button>
             )}
