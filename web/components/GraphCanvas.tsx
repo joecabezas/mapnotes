@@ -39,6 +39,8 @@ interface Props {
   highlight: string[] | null;
   /** Nodes not shown; their edges are hidden with them. */
   hidden: string[];
+  /** When this changes, the graph is swapped in with a transition: nodes glide to their new positions and elements fade in or out. */
+  transitionKey?: string;
   onSelect(sel: Selection): void;
   onNodeTapInConnectMode(id: string): void;
   onBackgroundDoubleTap(pos: Position): void;
@@ -81,8 +83,11 @@ function updateArcs(edges: cytoscape.EdgeCollection) {
 const CLUSTER_PAD = 16;
 
 /** The visible nodes a cluster node is drawn around (see `clusterMembers` in the model). */
+/** How long a graph transition (see `transitionKey`) takes. */
+const TRANSITION_MS = 350;
+
 function membersOf(cluster: NodeSingular): cytoscape.NodeCollection {
-  return cluster.neighborhood('node').filter((m) => !m.data('isCluster') && !m.hasClass('hidden'));
+  return cluster.neighborhood('node').filter((m) => !m.data('isCluster') && !m.hasClass('hidden') && !m.hasClass('leaving'));
 }
 
 /** Fits a cluster's outline around its members. */
@@ -368,18 +373,34 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
   }, [props.graph.styles, props.theme, icons]);
 
   // Diff the graph into Cytoscape.
+  const lastTransitionKey = useRef(props.transitionKey);
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy) return;
     const { graph } = props;
     const wasEmpty = cy.nodes().empty();
     const unplaced: string[] = [];
+    // A transition: elements that go fade out (class `leaving`) before they are removed, new ones fade in, and the rest glide.
+    const animated =
+      lastTransitionKey.current !== props.transitionKey && !wasEmpty && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    lastTransitionKey.current = props.transitionKey;
+    let leaving = cy.collection();
+    const entering: cytoscape.SingularElementReturnValue[] = [];
+    const moves: [NodeSingular, Position][] = [];
+    /** Brings back an element that was fading out. */
+    const revive = (ele: cytoscape.SingularElementReturnValue) => {
+      ele.removeClass('leaving').selectify();
+      ele.stop(true);
+      if (animated) entering.push(ele);
+      else ele.removeStyle('opacity');
+    };
 
     cy.batch(() => {
       const nodeIds = new Set(graph.nodes.map((n) => nid(n.id)));
       const edgeIds = new Set(graph.edges.map((e) => eid(e.id)));
-      cy.edges().filter((e) => !edgeIds.has(e.id())).remove();
-      cy.nodes().filter((n) => !nodeIds.has(n.id())).remove();
+      const gone = cy.elements().filter((e) => !(e.isNode() ? nodeIds : edgeIds).has(e.id()));
+      if (animated) leaving = gone;
+      else gone.remove();
 
       for (const node of graph.nodes) {
         const data = {
@@ -395,14 +416,19 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
         };
         const ele = cy.getElementById(data.id);
         if (ele.nonempty()) {
+          if (ele.hasClass('leaving')) revive(ele);
           ele.data(data);
+          // Still gliding from an earlier transition: where it was going no longer counts.
+          if (ele.scratch('gliding')) ele.removeScratch('gliding').stop(true);
           const p = ele.position();
           // A cluster's position is its outline's centre, not the saved one.
           if (node.position && !ele.hasClass('cluster') && !ele.grabbed() && (p.x !== node.position.x || p.y !== node.position.y)) {
-            ele.position(node.position);
+            if (animated) moves.push([ele, node.position]);
+            else ele.position(node.position);
           }
         } else {
-          cy.add({ group: 'nodes', data, position: node.position ? { ...node.position } : { x: 0, y: 0 } });
+          const added = cy.add({ group: 'nodes', data, position: node.position ? { ...node.position } : { x: 0, y: 0 } });
+          if (animated) entering.push(added.style('opacity', 0));
           if (!node.position) unplaced.push(node.id);
         }
       }
@@ -418,9 +444,11 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
         };
         const ele = cy.getElementById(data.id);
         if (ele.empty()) {
-          cy.add({ group: 'edges', data });
+          const added = cy.add({ group: 'edges', data });
+          if (animated) entering.push(added.style('opacity', 0));
           continue;
         }
+        if (ele.hasClass('leaving')) revive(ele);
         if (ele.data('source') !== data.source || ele.data('target') !== data.target) {
           (ele as cytoscape.EdgeSingular).move({ source: data.source, target: data.target });
         }
@@ -472,9 +500,45 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
     } else if (wasEmpty && graph.nodes.length) {
       cy.fit(undefined, 50);
     }
+    if (animated) {
+      // Frame the graph as it will be once the nodes have arrived.
+      const frame = { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity };
+      const target = new Map(moves);
+      cy.nodes()
+        .not(leaving)
+        .not('.cluster, .hidden')
+        .forEach((n) => {
+          const box = visibleBox(n);
+          const to = target.get(n);
+          const dx = to ? to.x - n.position('x') : 0;
+          const dy = to ? to.y - n.position('y') : 0;
+          frame.x1 = Math.min(frame.x1, box.x1 + dx);
+          frame.y1 = Math.min(frame.y1, box.y1 + dy);
+          frame.x2 = Math.max(frame.x2, box.x2 + dx);
+          frame.y2 = Math.max(frame.y2, box.y2 + dy);
+        });
+      const timing = { duration: TRANSITION_MS, easing: 'ease-in-out' } as const;
+      if (frame.x1 <= frame.x2 && unplaced.length !== graph.nodes.length) {
+        const boundingBox = { ...frame, w: frame.x2 - frame.x1, h: frame.y2 - frame.y1 };
+        // Cytoscape fits to a bounding box as well as to elements; its types only list the latter.
+        cy.animate({ fit: { boundingBox, padding: 50 } as unknown as cytoscape.AnimationFitOptions, ...timing });
+      }
+      for (const [node, position] of moves) {
+        node.scratch('gliding', true);
+        node.animate({ position }, { ...timing, complete: () => void node.removeScratch('gliding') });
+      }
+      for (const ele of entering) ele.animate({ style: { opacity: 1 } }, { ...timing, complete: () => void ele.removeStyle('opacity') });
+      leaving.addClass('leaving').unselect().unselectify();
+      leaving.forEach((ele) => {
+        ele.stop(true);
+        ele.animate({ style: { opacity: 0 } }, { ...timing, complete: () => void (ele.hasClass('leaving') && ele.remove()) });
+      });
+      // The zones bent around the nodes that left.
+      if (leaving.nonempty()) setTimeout(() => cyRef.current === cy && refreshClusters(cy), TRANSITION_MS + 50);
+    }
     refreshClusters(cy);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.graph]);
+  }, [props.graph, props.transitionKey]);
 
   // Hidden nodes: not shown, and not selectable (e.g. by a box selection) until revealed.
   // Runs before the selection is reflected, so nodes revealed and selected at once can be selected.
