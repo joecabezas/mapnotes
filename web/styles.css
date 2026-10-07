@@ -267,15 +267,24 @@ code,
   display: flex;
   align-items: center;
   min-width: 0;
-  width: 110px;
+  width: 150px;
 }
 .search input {
   width: 100%;
   padding-right: 32px;
 }
+/* Room for the match count and the clear button. */
+.search input:not(:placeholder-shown) {
+  padding-right: 52px;
+}
 .search .count {
   position: absolute;
-  right: 6px;
+  right: 28px;
+}
+/* Two classes, to win over the `position: relative` every element with a tooltip gets. */
+.search .search-clear {
+  position: absolute;
+  right: 2px;
 }
 
 .sync {

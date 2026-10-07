@@ -1231,6 +1231,19 @@ export function App() {
               }}
             />
             {matches && <span className="count">{matches.length}</span>}
+            {query && (
+              <button
+                className="icon-btn search-clear"
+                data-tip="Clear search (Esc)"
+                aria-label="Clear search"
+                onClick={() => {
+                  setQuery('');
+                  searchInput.current?.focus();
+                }}
+              >
+                <Icon name="close" />
+              </button>
+            )}
           </div>
 
           <div className="toolbar-utilities">
