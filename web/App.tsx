@@ -189,6 +189,12 @@ export function App() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [issues, setIssues] = useState<Issues | null>(null);
   const [layoutName, setLayoutName] = useState<LayoutName>('auto');
+  /** Live repulsion is on: nodes push each other apart until it is switched off. */
+  const [floating, setFloating] = useState(false);
+  const land = useCallback((save = true) => {
+    canvas.current?.land(save);
+    setFloating(false);
+  }, []);
   const [panelWidth, setPanelWidth] = useState(() => Number(storageGet(PANEL_WIDTH_KEY)) || PANEL_WIDTH_DEFAULT);
   const panelMax = Math.max(PANEL_WIDTH_MIN, window.innerWidth - CANVAS_MIN_WIDTH);
 
@@ -255,8 +261,10 @@ export function App() {
   }, []);
 
   const clearViewUi = useCallback(() => {
+    // The graph is being replaced: where its nodes were floating to is not worth saving.
+    land(false);
     setActiveViewId('');
-  }, []);
+  }, [land]);
 
   /** Replaces the graph and clears undo history, without writing it back to the file. */
   const resetGraph = useCallback(
@@ -478,12 +486,14 @@ export function App() {
   }, [viewsMenuOpen]);
 
   const switchView = useCallback((id: string) => {
+    // Before the view changes, so the floating nodes are saved in the view they were floating in.
+    land();
     setActiveViewId(id);
     setViewSwitches((n) => n + 1);
     setSelection(null);
     setConnect(null);
     setExpansions([]);
-  }, []);
+  }, [land]);
 
   /** Creates a view, or replaces the active one, laid out as the nodes currently appear on the canvas. */
   const saveView = useCallback(
@@ -560,6 +570,24 @@ export function App() {
     },
     [layoutScope, toast],
   );
+
+  /** Switches live repulsion on for the selected nodes (or all of them), or off again. */
+  const toggleFloating = useCallback(() => {
+    if (floating) {
+      land();
+      return;
+    }
+    const count = canvas.current?.float(layoutScope ?? undefined) ?? 0;
+    if (!count) {
+      toast('Repulsion needs at least two nodes', 'error');
+      return;
+    }
+    setFloating(true);
+    // Selected nodes are dragged together; unselected, each one can be dragged into the others.
+    setSelection(null);
+    setExpansions([]);
+    toast(`Repulsion on for ${layoutScope ? `the ${count} selected` : `all ${count}`} nodes: drag one and the rest follow or make way`);
+  }, [floating, land, layoutScope, toast]);
 
   const canExpand = useMemo(() => {
     const skip = new Set([...selectedNodeIds, ...hidden]);
@@ -944,7 +972,8 @@ export function App() {
           break;
         case 'l':
         case 'L':
-          void runLayout(layoutName);
+          // Not while the nodes are repelling each other: the two would fight over them.
+          if (!floating) void runLayout(layoutName);
           break;
         case '/':
           e.preventDefault();
@@ -959,7 +988,7 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [addNodeInView, closeFileDrawer, connect, deleteSelection, expandSelection, fileDrawerOpen, helpOpen, hidden, hideSelection, layoutName, mcpOpen, movingNodeIds, onNodesMoved, openAction, revealHidden, redo, runLayout, save, selection, shrinkSelection, startConnect, stylesOpen, undo, viewDialog]);
+  }, [addNodeInView, closeFileDrawer, connect, deleteSelection, expandSelection, fileDrawerOpen, floating, helpOpen, hidden, hideSelection, layoutName, mcpOpen, movingNodeIds, onNodesMoved, openAction, revealHidden, redo, runLayout, save, selection, shrinkSelection, startConnect, stylesOpen, undo, viewDialog]);
 
   return (
     <div className="app">
@@ -1036,6 +1065,7 @@ export function App() {
             value={layoutName}
             data-tip={layoutScope ? `Automatic layout for the ${layoutScope.length} selected nodes` : 'Automatic layout for the whole graph (select nodes to lay out just those)'}
             aria-label="Layout algorithm"
+            disabled={floating}
             onChange={(e) => {
               const name = e.target.value as LayoutName;
               setLayoutName(name);
@@ -1046,13 +1076,30 @@ export function App() {
           </select>
           <button
             className={`btn ghost icon${layoutScope ? ' scoped' : ''}${layoutsRunning ? ' busy' : ''}`}
-            disabled={layoutsRunning > 0}
+            disabled={layoutsRunning > 0 || floating}
             data-tip={layoutScope ? `Run the layout on the ${layoutScope.length} selected nodes (L)` : 'Run the layout on the whole graph (L)'}
             aria-label={layoutScope ? 'Run layout on selected nodes' : 'Run layout again'}
             onClick={() => void runLayout(layoutName)}
           >
             <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8M21 3v5h-5M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16M8 16H3v5" />
+            </svg>
+          </button>
+          <button
+            className={`btn ghost icon${floating ? ' active' : layoutScope ? ' scoped' : ''}`}
+            aria-pressed={floating}
+            data-tip={
+              floating
+                ? 'Stop repelling'
+                : `Repel: ${layoutScope ? `the ${layoutScope.length} selected nodes` : 'all nodes'} float apart, held together by their edges, also while you drag them${layoutScope ? '; the rest fade' : ''}`
+            }
+            aria-label="Repel"
+            onClick={toggleFloating}
+          >
+            <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <circle cx="12" cy="12" r="1" />
+              <path d="M20.2 20.2c2.04-2.03.02-7.36-4.5-11.9-4.54-4.52-9.87-6.54-11.9-4.5-2.04 2.03-.02 7.36 4.5 11.9 4.54 4.52 9.87 6.54 11.9 4.5Z" />
+              <path d="M15.7 15.7c4.52-4.54 6.54-9.87 4.5-11.9-2.03-2.04-7.36-.02-11.9 4.5-4.52 4.54-6.54 9.87-4.5 11.9 2.03 2.04 7.36.02 11.9-4.5Z" />
             </svg>
           </button>
           <button className="btn ghost icon" data-tip="Fit selection, or the whole graph, to screen (F)" aria-label="Fit selection or graph to screen" onClick={() => canvas.current?.fit()}>

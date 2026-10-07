@@ -55,6 +55,8 @@ export function HelpDialog({
             <li>
               <b>Arrange</b>: drag nodes around, or pick an automatic layout (<em>Fewest crossings</em> tries several and keeps
               the one with the fewest edge crossings). With two or more nodes selected, the layout only moves those.
+              <em>Repel</em> is a switch: while it is on, those nodes float apart, held together by
+              their edges, and dragging one pushes the others away and pulls along the ones connected to it; the rest fade.
               Positions are saved with the graph.
             </li>
             <li>

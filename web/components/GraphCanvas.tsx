@@ -5,6 +5,7 @@ import { arrange, type ArrangeOp } from '../arrange';
 import { type Box, zoneAround } from '../hull';
 import { computeLayout, type LayoutName, type LayoutResult } from '../layout';
 import { isArced } from '../layoutQuality';
+import { type Body, stepRepulsion } from '../repel';
 import { useIcons } from '../icons';
 import { buildStylesheet, CANVAS_COLORS, clusterColor, type ThemeName } from '../theme';
 
@@ -27,6 +28,14 @@ export interface GraphCanvasHandle {
   exportPng(): string;
   /** Aligns or distributes the given nodes, saving their new positions as one undo step. */
   arrange(ids: string[], op: ArrangeOp): void;
+  /**
+   * Starts live repulsion: the given nodes (or all of them) float apart until there is room between
+   * them, held together by the edges between them, and keep pushing and pulling each other as they
+   * are dragged, until `land`; the other nodes fade meanwhile. Returns how many nodes float.
+   */
+  float(ids?: string[]): number;
+  /** Stops live repulsion, saving where the nodes are unless `save` is false. */
+  land(save?: boolean): void;
 }
 
 interface Props {
@@ -83,6 +92,9 @@ function updateArcs(edges: cytoscape.EdgeCollection) {
 const CLUSTER_PAD = 16;
 
 /** The visible nodes a cluster node is drawn around (see `clusterMembers` in the model). */
+/** Below this speed (px/s) floating nodes count as at rest. */
+const REST_SPEED = 4;
+
 /** How long a graph transition (see `transitionKey`) takes. */
 const TRANSITION_MS = 350;
 
@@ -169,8 +181,94 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
     const positions: Record<string, Position> = {};
     nodes.not('.cluster').forEach((n) => {
       positions[n.data('refId')] = { ...n.position() };
+      // What the app was last told, to tell its answer from someone else's change while the node floats.
+      n.scratch('reported', positions[n.data('refId')]);
     });
     if (Object.keys(positions).length) latest.current.onNodesMoved(positions, record);
+  }
+
+  /** Live repulsion in progress (see `float`): its nodes are drawn with class `floating`, the rest with `offstage`. */
+  const floating = useRef<{ nodes: cytoscape.NodeCollection; frame: number; asleep: boolean; unsaved: boolean } | null>(null);
+
+  function land(save = true) {
+    const sim = floating.current;
+    if (!sim) return;
+    cancelAnimationFrame(sim.frame);
+    floating.current = null;
+    const nodes = sim.nodes.filter((n) => !n.removed());
+    nodes.removeClass('floating');
+    cyRef.current?.elements('.offstage').removeClass('offstage');
+    if (save && sim.unsaved) reportPositions(nodes, true);
+  }
+
+  function float(ids?: string[]): number {
+    const cy = cyRef.current;
+    if (!cy) return 0;
+    land();
+    const wanted = ids && new Set(ids);
+    const nodes = cy
+      .nodes(':visible')
+      .not('.cluster, .leaving')
+      .filter((n) => !wanted || wanted.has(n.data('refId')));
+    if (nodes.length < 2) return 0;
+    const bodies = new Map<string, Body>();
+    nodes.forEach((n) => {
+      const box = n.boundingBox({ includeLabels: true, includeOverlays: false, includeUnderlays: false });
+      bodies.set(n.id(), { ...n.position(), vx: 0, vy: 0, radius: Math.max(box.w, box.h) / 2, pinned: false });
+      n.scratch('reported', { ...n.position() });
+    });
+    nodes.addClass('floating');
+    // The rest of the graph takes no part: it fades while the nodes float.
+    const others = cy.nodes().not(nodes);
+    others.union(others.connectedEdges()).addClass('offstage');
+    const sim = { nodes, frame: 0, asleep: false, unsaved: false };
+    floating.current = sim;
+    let last = performance.now();
+    const tick = (now: number) => {
+      sim.frame = requestAnimationFrame(tick);
+      // A long pause (e.g. a background tab) must not turn into one huge leap.
+      const dt = Math.min((now - last) / 1000, 0.05);
+      last = now;
+      const live = (sim.nodes.toArray() as NodeSingular[]).filter((n) => !n.removed() && !n.hasClass('hidden'));
+      const held = live.some((n) => n.grabbed());
+      // At rest until a node is dragged, or moved by something else (see the graph diff).
+      if (sim.asleep && !held) return;
+      const active = live.map((n) => {
+        const body = bodies.get(n.id())!;
+        // Nodes go where they are dragged or put; the simulation only adds to that.
+        Object.assign(body, n.position(), { pinned: n.grabbed() || n.locked() });
+        return body;
+      });
+      // Edges between floating nodes hold them together.
+      const index = new Map(live.map((n, i) => [n.id(), i]));
+      const links: [number, number][] = [];
+      sim.nodes.edgesWith(sim.nodes).forEach((e) => {
+        const a = index.get(e.data('source'));
+        const b = index.get(e.data('target'));
+        if (a !== undefined && b !== undefined) links.push([a, b]);
+      });
+      const fastest = stepRepulsion(active, dt, links);
+      cy.batch(() => {
+        live.forEach((n) => {
+          const body = bodies.get(n.id())!;
+          if (!body.pinned && (body.vx || body.vy)) n.position({ x: body.x, y: body.y });
+        });
+      });
+      if (fastest >= REST_SPEED) {
+        sim.asleep = false;
+        sim.unsaved = true;
+      } else if (!held) {
+        sim.asleep = true;
+        bodies.forEach((body) => Object.assign(body, { vx: 0, vy: 0 }));
+        // Save once they have come to rest, not on every frame.
+        if (sim.unsaved) {
+          sim.unsaved = false;
+          reportPositions(sim.nodes.filter((n) => !n.removed()), true);
+        }
+      }
+    };
+    sim.frame = requestAnimationFrame(tick);
+    return nodes.length;
   }
 
   /** Bumped by every layout run, so a slow one finishing late doesn't undo a newer one. */
@@ -237,6 +335,8 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
       const positions = arrange(items, op);
       if (Object.keys(positions).length) latest.current.onNodesMoved(positions, true);
     },
+    float,
+    land,
   }));
 
   // Create the Cytoscape instance once.
@@ -355,6 +455,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
     if (container.current) resizeObserver.observe(container.current);
 
     return () => {
+      land(false);
       resizeObserver.disconnect();
       cancelAnimationFrame(reshapeFrame);
       cy.destroy();
@@ -421,10 +522,17 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
           // Still gliding from an earlier transition: where it was going no longer counts.
           if (ele.scratch('gliding')) ele.removeScratch('gliding').stop(true);
           const p = ele.position();
+          // A floating node is ahead of what is saved: it only goes where the graph says when that changed.
+          const reported = ele.hasClass('floating') ? (ele.scratch('reported') as Position | undefined) : undefined;
+          const ahead = !!reported && reported.x === node.position?.x && reported.y === node.position?.y;
           // A cluster's position is its outline's centre, not the saved one.
-          if (node.position && !ele.hasClass('cluster') && !ele.grabbed() && (p.x !== node.position.x || p.y !== node.position.y)) {
+          if (node.position && !ahead && !ele.hasClass('cluster') && !ele.grabbed() && (p.x !== node.position.x || p.y !== node.position.y)) {
             if (animated) moves.push([ele, node.position]);
             else ele.position(node.position);
+            if (reported && floating.current) {
+              ele.scratch('reported', node.position);
+              floating.current.asleep = false;
+            }
           }
         } else {
           const added = cy.add({ group: 'nodes', data, position: node.position ? { ...node.position } : { x: 0, y: 0 } });

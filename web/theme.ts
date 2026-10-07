@@ -203,6 +203,11 @@ export function buildStylesheet(styles: Style[], theme: ThemeName, icons: Record
     },
     // A cluster's own edges are hidden: the zone shows what it connects to.
     { selector: 'edge.cluster-edge', style: { display: 'none' } },
+    // Pushing each other apart (live repulsion): a soft halo, as if floating.
+    {
+      selector: 'node.floating',
+      style: { 'underlay-color': c.accent, 'underlay-opacity': 0.12, 'underlay-padding': 10, 'underlay-shape': 'ellipse' },
+    },
     {
       selector: 'node:selected',
       style: {
@@ -238,6 +243,8 @@ export function buildStylesheet(styles: Style[], theme: ThemeName, icons: Record
         'underlay-padding': 8,
       },
     },
+    // Taking no part while other nodes repel each other.
+    { selector: '.offstage', style: { opacity: 0.2 } },
     { selector: '.dimmed', style: { opacity: 0.18 } },
     // Hidden nodes (H); Cytoscape hides their edges too.
     { selector: 'node.hidden', style: { display: 'none' } },
