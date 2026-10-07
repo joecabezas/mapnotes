@@ -177,6 +177,8 @@ export function App() {
   const [viewsMenuOpen, setViewsMenuOpen] = useState(false);
   const viewsMenu = useRef<HTMLDivElement>(null);
   const [activeViewId, setActiveViewId] = useState('');
+  /** Counts view switches, so that saving a view's new filter is animated like switching to it. */
+  const [viewSwitches, setViewSwitches] = useState(0);
   const activeView = graph.views?.find((v) => v.id === activeViewId);
   const visibleGraph = useMemo(
     () => (activeView ? projectGraph(graph, activeView.filters, activeView.positions) : graph),
@@ -477,10 +479,10 @@ export function App() {
 
   const switchView = useCallback((id: string) => {
     setActiveViewId(id);
+    setViewSwitches((n) => n + 1);
     setSelection(null);
     setConnect(null);
     setExpansions([]);
-    requestAnimationFrame(() => canvas.current?.fit());
   }, []);
 
   /** Creates a view, or replaces the active one, laid out as the nodes currently appear on the canvas. */
@@ -1251,6 +1253,7 @@ export function App() {
           connectSource={connect?.source ?? null}
           highlight={matches}
           hidden={hidden}
+          transitionKey={`${activeViewId}:${viewSwitches}`}
           onSelect={setSelection}
           onNodeTapInConnectMode={onConnectTap}
           onBackgroundDoubleTap={addNodeAt}
