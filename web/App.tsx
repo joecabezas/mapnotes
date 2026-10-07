@@ -462,7 +462,10 @@ export function App() {
       if (!viewsMenu.current?.contains(e.target as Node)) setViewsMenuOpen(false);
     };
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setViewsMenuOpen(false);
+      if (e.key !== 'Escape') return;
+      // Escape only closes the panel: it must not also reach the shortcuts that clear the selection.
+      e.stopPropagation();
+      setViewsMenuOpen(false);
     };
     document.addEventListener('pointerdown', onPointerDown);
     document.addEventListener('keydown', onKeyDown);
