@@ -207,10 +207,12 @@ export function buildStylesheet(styles: Style[], theme: ThemeName, icons: Record
       selector: 'node:selected',
       style: {
         'border-color': c.accent,
-        'border-width': 4,
+        'border-width': 6,
+        // Grows outwards, so a thick ring doesn't cover the node's colour or icon.
+        'border-position': 'outside',
         'underlay-color': c.accent,
-        'underlay-opacity': 0.25,
-        'underlay-padding': 6,
+        'underlay-opacity': 0.3,
+        'underlay-padding': 14,
       },
     },
     // The glow can't follow a polygon (it would be a rectangle); the outline shows the selection.
