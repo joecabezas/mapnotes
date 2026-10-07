@@ -38,6 +38,7 @@ Every push to `master` is built and published to GitHub Pages by `.github/workfl
 | Hide / show | `H` hides the selected nodes and their edges; `Shift+H` shows them all again (the status bar counts hidden nodes). Hiding only affects the view and isn't saved, but it can be undone |
 | Arrange | Drag nodes, or pick a layout from the dropdown (it applies immediately; **↻** runs it again). **Smart (layered)** puts parents above their children and minimises edge crossings; **Force-directed** spreads nodes out like springs. `F` fits the selection in view, or the whole graph if nothing is selected |
 | Styles | **🎨 Styles**: node color/border/shape/size/icon, edge color/width/line/arrow/curve |
+| Views | **Views** opens a panel to switch between saved views, create one (**＋**) or edit the current one (**✎**). While a view is active, **×** next to **Views** returns to the full graph. See "Filters and saved views" below |
 | Search | `/` — matches labels, ids and property values; `Enter` jumps to the first hit |
 | Undo / redo | `Ctrl+Z` / `Ctrl+Shift+Z` |
 | Open / save | `Ctrl+O` / `Ctrl+S` (saves to the open file; **Download** in Firefox/Safari); Save as, JSON and PNG in the ▾ menu |
@@ -45,11 +46,16 @@ Every push to `master` is built and published to GitHub Pages by `.github/workfl
 
 ### Filters and saved views
 
-Use **Filters** to narrow the canvas by entity type, node style, text, exact properties, proximity to a node (1–3 hops), and edge labels. **Apply filters** for a temporary view, or name and **Save view** to keep it. Switch views from the dropdown; **All nodes** shows the full graph.
+A saved view shows part of the graph: the nodes that match its filter. Nodes, edges and properties stay shared, so an edit made in a view changes the same graph you see everywhere else.
 
-Each saved view remembers its own node positions (drag and layout changes). Edits to nodes, edges and properties always affect the shared graph. Search, selection and layout work on visible nodes. YAML/JSON saves include the full graph; PNG exports show what's on screen.
+- **Create**: click **Views**, then **＋**. Give the view a name and choose what it shows: entity types, node styles, text, exact property values, nodes within 1–3 connections of a node, and edge labels. Values within one list are alternatives; different filters must all match. **None** matches nothing, and **All** removes that restriction. A node's entity type is its `type` property, or its style if it has none (PR styles are grouped as `pr`).
+- **Switch**: pick a view from the dropdown in the **Views** panel. The **Views** button is highlighted while a view is active, and the panel shows how many nodes are visible (e.g. `12/40 nodes`).
+- **Back to the full graph**: click **×** next to **Views**.
+- **Edit**: **✎** in the panel lets you rename the view, change its filter, reset the filter or delete the view.
 
-Views live under an optional top-level `views` field:
+Each view keeps its own layout: dragging nodes or running a layout in a view doesn't move them anywhere else. A view only stores positions for the nodes it shows, so a node that stops matching the filter, or is removed, loses its position in that view. Selection, search and layout act on the visible nodes. Saving or downloading YAML/JSON always keeps the full graph, while PNG exports what is on the canvas.
+
+Views are stored under the optional top-level `views` field of the graph file and in the browser copy. They store the filter, not a list of nodes, so new nodes that match appear in the view automatically. Files without views still work. MCP server versions from before views were added drop this field when they save; restart your MCP client to update it.
 
 ```yaml
 views:
@@ -184,6 +190,21 @@ edges:
     label: fixes                 # optional
     style: fixes                 # optional
     properties: []
+views:                           # optional saved views (see "Filters and saved views")
+  - id: open-prs
+    name: Open PRs
+    filters:                     # every filter is optional
+      types: [pr]                # `type` property, or style when there is none
+      styles: [pr]
+      query: login               # text in ids, labels and properties
+      properties:                # exact key/value matches, all required
+        - key: author
+          value: sam
+      relatedTo: [issue-12]      # only nodes within `depth` connections of these
+      depth: 2                   # 1-3, default 2
+      edgeLabels: [fixes]        # only edges with these labels
+    positions:                   # this view's layout, only for the nodes it shows
+      pr-101: { x: 0, y: 0 }
 ```
 
 For hand-written files, `properties` may also be a plain mapping (`properties: { author: sam }`), and edge ids may be left out (they're generated). JSON with the same structure is accepted too. See `examples/layering-100.yaml`.

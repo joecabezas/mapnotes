@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { criteriaIsEmpty, projectGraph, storeNodePositions, type ViewCriteria } from '../shared/filterViews';
+import { projectGraph, pruneViewPositions, storeNodePositions, type ViewCriteria } from '../shared/filterViews';
 import { addEdge, addNode, clusterMembers, emptyGraph, type Graph, type Position, removeEdge, removeNode, uniqueId } from '../shared/model';
 import { formatForPath, parseGraphText, serializeGraph, serializeGraphYaml } from '../shared/yaml';
 import { GraphCanvas, type GraphCanvasHandle, type Selection } from './components/GraphCanvas';
@@ -172,20 +172,15 @@ export function App() {
   const [mcpOpen, setMcpOpen] = useState(false);
   const [fileDrawerOpen, setFileDrawerOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [filterDialogOpen, setFilterDialogOpen] = useState(false);
+  /** Whether the view dialog is open to create a new view or to edit the active one. */
+  const [viewDialog, setViewDialog] = useState<'create' | 'edit' | null>(null);
+  const [viewsMenuOpen, setViewsMenuOpen] = useState(false);
+  const viewsMenu = useRef<HTMLDivElement>(null);
   const [activeViewId, setActiveViewId] = useState('');
-  const [previewCriteria, setPreviewCriteria] = useState<ViewCriteria | null>(null);
-  const [previewLayout, setPreviewLayout] = useState<Record<string, Position>>({});
   const activeView = graph.views?.find((v) => v.id === activeViewId);
-  const effectiveCriteria = previewCriteria ?? activeView?.filters ?? {};
-  const effectiveLayout = previewCriteria ? previewLayout : activeView?.positions;
-  const filtering = !criteriaIsEmpty(effectiveCriteria);
   const visibleGraph = useMemo(
-    () =>
-      filtering || effectiveLayout !== undefined
-        ? projectGraph(graph, effectiveCriteria, effectiveLayout)
-        : graph,
-    [graph, filtering, effectiveCriteria, effectiveLayout, previewLayout],
+    () => (activeView ? projectGraph(graph, activeView.filters, activeView.positions) : graph),
+    [graph, activeView],
   );
   const visibleRef = useRef(visibleGraph);
   visibleRef.current = visibleGraph;
@@ -223,6 +218,7 @@ export function App() {
   const setGraph = useCallback((next: Graph, opts: { record?: boolean; fromRemote?: boolean } = {}) => {
     const { record = true, fromRemote = false } = opts;
     if (fromRemote) skipSave.current = true;
+    next = pruneViewPositions(next);
     graphRef.current = next;
     setHist((h) => {
       if (!record) return { ...h, graph: next };
@@ -258,8 +254,6 @@ export function App() {
 
   const clearViewUi = useCallback(() => {
     setActiveViewId('');
-    setPreviewCriteria(null);
-    setPreviewLayout({});
   }, []);
 
   /** Replaces the graph and clears undo history, without writing it back to the file. */
@@ -461,47 +455,62 @@ export function App() {
     if (activeViewId && !activeView) setActiveViewId('');
   }, [activeView, activeViewId]);
 
+  // The views panel closes on a click outside it or Escape, like a menu.
+  useEffect(() => {
+    if (!viewsMenuOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!viewsMenu.current?.contains(e.target as Node)) setViewsMenuOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setViewsMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [viewsMenuOpen]);
+
   const switchView = useCallback((id: string) => {
     setActiveViewId(id);
-    setPreviewCriteria(null);
-    setPreviewLayout({});
     setSelection(null);
     setConnect(null);
     setExpansions([]);
     requestAnimationFrame(() => canvas.current?.fit());
   }, []);
 
+  /** Creates a view, or replaces the active one, laid out as the nodes currently appear on the canvas. */
   const saveView = useCallback(
-    (name: string, criteria: ViewCriteria, replace: boolean) => {
+    (name: string, criteria: ViewCriteria) => {
+      const editing = viewDialog === 'edit' ? activeView : undefined;
       const id =
-        replace && activeView
-          ? activeView.id
-          : uniqueId(
-              'view',
-              (graphRef.current.views ?? []).map((v) => v.id),
-            );
-      const positions = {
-        ...activeView?.positions,
-        ...Object.fromEntries(visibleRef.current.nodes.filter((n) => n.position).map((n) => [n.id, n.position!])),
-      };
+        editing?.id ??
+        uniqueId(
+          'view',
+          (graphRef.current.views ?? []).map((v) => v.id),
+        );
+      const shown = projectGraph(graphRef.current, criteria, activeView?.positions).nodes;
+      const positions = Object.fromEntries(shown.filter((n) => n.position).map((n) => [n.id, n.position!]));
+      const view = { id, name, filters: structuredClone(criteria), positions };
       if (
         !apply((g) => ({
           ...g,
-          views: [...(g.views ?? []).filter((v) => v.id !== id), { id, name, filters: structuredClone(criteria), positions }],
+          views: editing ? (g.views ?? []).map((v) => (v.id === id ? view : v)) : [...(g.views ?? []), view],
         }))
       )
         return;
       switchView(id);
-      setFilterDialogOpen(false);
+      setViewDialog(null);
       toast(`Saved view “${name}”`);
     },
-    [activeView, apply, switchView, toast],
+    [activeView, apply, switchView, toast, viewDialog],
   );
 
   const deleteView = useCallback(() => {
     if (!activeView || !apply((g) => ({ ...g, views: (g.views ?? []).filter((v) => v.id !== activeView.id) }))) return;
     switchView('');
-    setFilterDialogOpen(false);
+    setViewDialog(null);
     toast(`Deleted view “${activeView.name}”`);
   }, [activeView, apply, switchView, toast]);
 
@@ -820,13 +829,9 @@ export function App() {
 
   const onNodesMoved = useCallback(
     (positions: Record<string, Position>, record: boolean) => {
-      if (previewCriteria) {
-        setPreviewLayout((prev) => ({ ...prev, ...positions }));
-        return;
-      }
       apply((g) => storeNodePositions(g, positions, activeView?.id), record);
     },
-    [activeView?.id, apply, previewCriteria],
+    [activeView?.id, apply],
   );
 
   // ---- Search.
@@ -915,7 +920,7 @@ export function App() {
           deleteSelection();
           break;
         case 'Escape':
-          if (filterDialogOpen) setFilterDialogOpen(false);
+          if (viewDialog) setViewDialog(null);
           else if (stylesOpen) setStylesOpen(false);
           else if (helpOpen) setHelpOpen(false);
           else if (mcpOpen) setMcpOpen(false);
@@ -949,7 +954,7 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [addNodeInView, closeFileDrawer, connect, deleteSelection, expandSelection, fileDrawerOpen, filterDialogOpen, helpOpen, hidden, hideSelection, layoutName, mcpOpen, movingNodeIds, onNodesMoved, openAction, revealHidden, redo, runLayout, save, selection, shrinkSelection, startConnect, stylesOpen, undo]);
+  }, [addNodeInView, closeFileDrawer, connect, deleteSelection, expandSelection, fileDrawerOpen, helpOpen, hidden, hideSelection, layoutName, mcpOpen, movingNodeIds, onNodesMoved, openAction, revealHidden, redo, runLayout, save, selection, shrinkSelection, startConnect, stylesOpen, undo, viewDialog]);
 
   return (
     <div className="app">
@@ -1023,26 +1028,6 @@ export function App() {
 
         <div className="toolbar-view">
           <select
-            className="view-select"
-            value={activeViewId}
-            aria-label="Saved view"
-            onChange={(e) => switchView(e.target.value)}
-          >
-            <option value="">All nodes</option>
-            {(graph.views ?? []).map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.name}
-              </option>
-            ))}
-          </select>
-          <button
-            className={`btn ghost${filtering ? ' active' : ''}`}
-            data-tip="Filter the canvas or manage saved views"
-            onClick={() => setFilterDialogOpen(true)}
-          >
-            Filters
-          </button>
-          <select
             value={layoutName}
             data-tip={layoutScope ? `Automatic layout for the ${layoutScope.length} selected nodes` : 'Automatic layout for the whole graph (select nodes to lay out just those)'}
             aria-label="Layout algorithm"
@@ -1080,6 +1065,62 @@ export function App() {
             </svg>
             Styles
           </button>
+          <div className="views-menu" ref={viewsMenu}>
+            <button
+              className={`btn ghost${activeView ? ' active' : ''}`}
+              data-tip={activeView ? `Showing view “${activeView.name}”` : 'Switch, create or edit saved views'}
+              aria-expanded={viewsMenuOpen}
+              aria-controls="views-panel"
+              onClick={() => setViewsMenuOpen((open) => !open)}
+            >
+              Views
+            </button>
+            {activeView && (
+              <button className="btn ghost icon views-clear" data-tip="Show all nodes" aria-label="Show all nodes" onClick={() => switchView('')}>
+                <Icon name="close" />
+              </button>
+            )}
+            {viewsMenuOpen && (
+              <div id="views-panel" className="views-panel">
+                <select aria-label="Saved view" value={activeView?.id ?? ''} onChange={(e) => switchView(e.target.value)}>
+                  <option value="" disabled>
+                    {graph.views?.length ? 'Choose a view…' : 'No saved views'}
+                  </option>
+                  {(graph.views ?? []).map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  className="btn ghost icon"
+                  data-tip="New view"
+                  aria-label="New view"
+                  onClick={() => {
+                    setViewsMenuOpen(false);
+                    setViewDialog('create');
+                  }}
+                >
+                  <Icon name="plus" />
+                </button>
+                <button
+                  className="btn ghost icon"
+                  data-tip="Edit this view"
+                  aria-label="Edit view"
+                  disabled={!activeView}
+                  onClick={() => {
+                    setViewsMenuOpen(false);
+                    setViewDialog('edit');
+                  }}
+                >
+                  <Icon name="edit" />
+                </button>
+                <span className="view-count">
+                  {visibleGraph.nodes.length}/{graph.nodes.length} nodes
+                </span>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="toolbar-end">
@@ -1339,15 +1380,15 @@ export function App() {
           </div>
         )}
 
-        {loaded && graph.nodes.length > 0 && filtering && visibleGraph.nodes.length === 0 && (
+        {loaded && graph.nodes.length > 0 && activeView && visibleGraph.nodes.length === 0 && (
           <div className="empty filtered-empty">
             <h2>No nodes match this view</h2>
-            <p>Adjust the filters or switch back to all nodes.</p>
+            <p>Adjust the filter or switch back to all nodes.</p>
             <div className="row center">
-              <button className="btn" onClick={() => setFilterDialogOpen(true)}>
-                Edit filters
+              <button className="btn" onClick={() => setViewDialog('edit')}>
+                Edit filter
               </button>
-              <button className="btn ghost" onClick={() => switchView('')}>
+              <button className="btn" onClick={() => switchView('')}>
                 Show all nodes
               </button>
             </div>
@@ -1418,22 +1459,13 @@ export function App() {
         />
       )}
       {mcpOpen && <McpDialog onClose={() => setMcpOpen(false)} />}
-      {filterDialogOpen && (
+      {viewDialog && (
         <FilterViewsDialog
           graph={graph}
-          criteria={effectiveCriteria}
-          editing={activeView}
-          onApply={(criteria) => {
-            setPreviewCriteria(criteria);
-            setPreviewLayout({});
-            setActiveViewId('');
-            setFilterDialogOpen(false);
-            setSelection(null);
-            requestAnimationFrame(() => canvas.current?.fit());
-          }}
+          editing={viewDialog === 'edit' ? activeView : undefined}
           onSave={saveView}
           onDelete={deleteView}
-          onClose={() => setFilterDialogOpen(false)}
+          onClose={() => setViewDialog(null)}
         />
       )}
 

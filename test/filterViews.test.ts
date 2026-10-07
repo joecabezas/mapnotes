@@ -4,8 +4,8 @@ import {
   inferNodeKind,
   parseSavedViews,
   projectGraph,
+  pruneViewPositions,
   storeNodePositions,
-  viewsAfterNodeRemoval,
   viewsAfterNodeRename,
 } from '../shared/filterViews.ts';
 import { editNode, emptyGraph, normalizeGraph, removeNode } from '../shared/model.ts';
@@ -136,6 +136,23 @@ describe('view maintenance on node edits', () => {
     expect(g.views?.[0].positions?.ann).toBeUndefined();
     expect(g.views?.[0].filters.relatedTo).toEqual([]);
     expect(projectGraph(g, g.views![0].filters).nodes).toEqual([]);
+  });
+});
+
+describe('pruneViewPositions', () => {
+  it('drops saved positions of nodes that do not exist when loading', () => {
+    const g = normalizeGraph({
+      nodes: [{ id: 'a', properties: { type: 'person' } }],
+      views: [{ id: 'v', name: 'V', filters: {}, positions: { a: { x: 1, y: 1 }, ghost: { x: 2, y: 2 } } }],
+    });
+    expect(Object.keys(g.views![0].positions!)).toEqual(['a']);
+  });
+
+  it('drops saved positions of nodes that no longer pass the view filter', () => {
+    const g = sampleGraph();
+    const next = pruneViewPositions(editNode(g, { id: 'alice', properties: [{ key: 'type', value: 'vendor' }] }).graph);
+    expect(next.views![0].positions).toEqual({});
+    expect(pruneViewPositions(g)).toBe(g);
   });
 });
 

@@ -1,14 +1,13 @@
 import { useMemo, useState } from 'react';
 import type { Graph } from '../../shared/model';
-import { criteriaIsEmpty, inferNodeKind, projectGraph, type SavedView, type ViewCriteria } from '../../shared/filterViews';
+import { inferNodeKind, projectGraph, type SavedView, type ViewCriteria } from '../../shared/filterViews';
 import { Icon } from './Icon';
 
 interface Props {
   graph: Graph;
-  criteria: ViewCriteria;
+  /** The view being edited; without one the dialog creates a new view. */
   editing?: SavedView;
-  onApply(criteria: ViewCriteria): void;
-  onSave(name: string, criteria: ViewCriteria, replace: boolean): void;
+  onSave(name: string, criteria: ViewCriteria): void;
   onDelete(): void;
   onClose(): void;
 }
@@ -60,8 +59,8 @@ function MultiPick({
   );
 }
 
-export function FilterViewsDialog({ graph, criteria: initial, editing, onApply, onSave, onDelete, onClose }: Props) {
-  const [criteria, setCriteria] = useState<ViewCriteria>(() => structuredClone(initial));
+export function FilterViewsDialog({ graph, editing, onSave, onDelete, onClose }: Props) {
+  const [criteria, setCriteria] = useState<ViewCriteria>(() => structuredClone(editing?.filters ?? {}));
   const [name, setName] = useState(editing?.name ?? '');
   const patch = (part: Partial<ViewCriteria>) => setCriteria((c) => ({ ...c, ...part }));
 
@@ -113,7 +112,7 @@ export function FilterViewsDialog({ graph, criteria: initial, editing, onApply, 
         }}
       >
         <header className="modal-head">
-          <h2 id="filter-views-title">Filters & saved views</h2>
+          <h2 id="filter-views-title">{editing ? 'Edit view' : 'New view'}</h2>
           <p className="muted small">Focus the canvas on part of the graph. Edits still apply to the whole graph.</p>
           <button type="button" className="icon-btn close" aria-label="Close" onClick={onClose}>
             <Icon name="close" />
@@ -122,9 +121,12 @@ export function FilterViewsDialog({ graph, criteria: initial, editing, onApply, 
 
         <div className="filter-views-body">
           <label className="field">
+            <span>View name</span>
+            <input autoFocus value={name} placeholder="e.g. People & PRs" onChange={(e) => setName(e.target.value)} />
+          </label>
+          <label className="field">
             <span>Contains text</span>
             <input
-              autoFocus
               value={criteria.query ?? ''}
               placeholder="Search labels, ids and properties"
               onChange={(e) => patch({ query: e.target.value || undefined })}
@@ -194,12 +196,12 @@ export function FilterViewsDialog({ graph, criteria: initial, editing, onApply, 
                   aria-label={`Remove property ${i + 1}`}
                   onClick={() => patch({ properties: propertyRows.filter((_, j) => j !== i) })}
                 >
-                  Remove
+                  <Icon name="trash" /> Remove
                 </button>
               </div>
             ))}
             <button type="button" className="btn small" onClick={() => patch({ properties: [...propertyRows, { key: '', value: '' }] })}>
-              Add property
+              <Icon name="plus" /> Add property
             </button>
           </details>
 
@@ -220,33 +222,19 @@ export function FilterViewsDialog({ graph, criteria: initial, editing, onApply, 
         </div>
 
         <footer className="filter-views-foot row">
-          <button type="button" className="btn" onClick={() => onApply(cleaned())}>
-            Apply filters
-          </button>
-          <label className="field grow">
-            <span>View name</span>
-            <input value={name} placeholder="e.g. People & PRs" onChange={(e) => setName(e.target.value)} />
-          </label>
-          <button
-            type="button"
-            className="btn primary"
-            disabled={!name.trim()}
-            onClick={() => onSave(name.trim(), cleaned(), !!editing)}
-          >
-            {editing ? 'Update view' : 'Save view'}
+          <button type="button" className="btn danger" onClick={() => setCriteria({})}>
+            <Icon name="reset" /> Reset filter
           </button>
           {editing && (
             <button type="button" className="btn danger" onClick={onDelete}>
-              Delete
+              <Icon name="trash" /> Delete view
             </button>
           )}
-          <button type="button" className="btn ghost" onClick={() => setCriteria({})}>
-            Reset
+          <button type="button" className="btn primary" disabled={!name.trim()} onClick={() => onSave(name.trim(), cleaned())}>
+            <Icon name={editing ? 'check' : 'plus'} /> {editing ? 'Save' : 'Create view'}
           </button>
         </footer>
       </div>
     </div>
   );
 }
-
-export { criteriaIsEmpty };

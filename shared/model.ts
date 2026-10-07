@@ -1,4 +1,4 @@
-import { parseSavedViews, viewsAfterNodeRemoval, viewsAfterNodeRename, type SavedView } from './filterViews';
+import { parseSavedViews, pruneViewPositions, viewsAfterNodeRemoval, viewsAfterNodeRename, type SavedView } from './filterViews';
 
 // Core data model shared by the web app, the dev file API and the MCP server.
 
@@ -326,7 +326,7 @@ export function normalizeGraph(input: unknown, issues?: string[]): Graph {
     );
   });
 
-  return graph;
+  return pruneViewPositions(graph);
 }
 
 // ---------------------------------------------------------------------------

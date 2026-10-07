@@ -36,6 +36,7 @@ import {
 } from '../shared/model.ts';
 import { DEFAULT_FIND_LIMIT, MAX_FIND_LIMIT, findNodes } from '../shared/search.ts';
 import { formatForPath, serializeGraph } from '../shared/yaml.ts';
+import { pruneViewPositions } from '../shared/filterViews.ts';
 
 let currentFile: string | undefined;
 let memoryGraph: Graph = emptyGraph();
@@ -102,6 +103,7 @@ async function commit(graph: Graph): Promise<void> {
       `Not saved: ${currentFile} has ${fileIssues.length} invalid entr${fileIssues.length === 1 ? 'y' : 'ies'} that would be lost:${issueList(fileIssues)}\nFix the file, or call save_graph to overwrite it without them.`,
     );
   }
+  graph = pruneViewPositions(graph);
   memoryGraph = graph;
   if (currentFile) {
     await writeGraphFile(currentFile, graph);
