@@ -162,6 +162,20 @@ export function parseSavedViews(input: unknown, issues?: string[]): SavedView[] 
   return views;
 }
 
+/** Keeps each view's positions only for the nodes it shows, so a layout never outlives its nodes. */
+export function pruneViewPositions(graph: Graph): Graph {
+  let changed = false;
+  const views = graph.views?.map((view) => {
+    if (!view.positions) return view;
+    const shown = new Set(projectGraph(graph, view.filters).nodes.map((n) => n.id));
+    const kept = Object.entries(view.positions).filter(([id]) => shown.has(id));
+    if (kept.length === Object.keys(view.positions).length) return view;
+    changed = true;
+    return { ...view, positions: Object.fromEntries(kept) };
+  });
+  return changed ? { ...graph, views } : graph;
+}
+
 /** Writes node positions into the base graph or a saved view's layout. */
 export function storeNodePositions(graph: Graph, positions: Record<string, Position>, viewId?: string): Graph {
   if (viewId && graph.views?.some((v) => v.id === viewId)) {

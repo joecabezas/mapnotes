@@ -1386,8 +1386,46 @@ button.sync.error {
 
 /* ---------- Filter views ---------- */
 
-.view-select {
-  max-width: 160px;
+.views-menu {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.views-menu > .btn.active:has(+ .views-clear) {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.views-clear,
+.views-clear:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ok) 25%, transparent);
+  border-color: var(--ok);
+}
+.views-clear {
+  margin-left: -1px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+.views-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.18);
+  z-index: 20;
+}
+.views-panel select {
+  width: min(240px, 60vw);
+}
+.view-count {
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--muted);
 }
 .filter-views-body {
   padding: 16px 20px;
@@ -1400,11 +1438,9 @@ button.sync.error {
   border-top: 1px solid var(--border);
   flex-wrap: wrap;
   gap: 8px;
-  align-items: flex-end;
 }
-.filter-views-foot .grow {
-  flex: 1;
-  min-width: 140px;
+.filter-views-foot .primary {
+  margin-left: auto;
 }
 .filter-pick {
   border: 1px solid var(--border);
