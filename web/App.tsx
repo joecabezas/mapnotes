@@ -3,7 +3,9 @@ import { projectGraph, pruneViewPositions, storeNodePositions, type ViewCriteria
 import { addEdge, addNode, clusterMembers, emptyGraph, type Graph, type Position, removeEdge, removeNode, uniqueId } from '../shared/model';
 import { formatForPath, parseGraphText, serializeGraph, serializeGraphYaml } from '../shared/yaml';
 import { GraphCanvas, type GraphCanvasHandle, type Selection } from './components/GraphCanvas';
-import { LAYOUTS, layoutLabel, type LayoutName } from './layout';
+import { LAYOUTS, layoutLabel, type LayoutName, type LayoutProgress } from './layout';
+import type { LayoutQuality } from './layoutQuality';
+import { EvolveControls, parseEvolveSettings } from './components/EvolveControls';
 import { HelpDialog } from './components/HelpDialog';
 import { Inspector } from './components/Inspector';
 import { McpDialog } from './components/McpDialog';
@@ -28,6 +30,7 @@ import { Icon } from './components/Icon';
 const LOCAL_KEY = 'mapnotes:graph';
 const THEME_KEY = 'mapnotes:theme';
 const PANEL_WIDTH_KEY = 'mapnotes:panelWidth';
+const EVOLVE_KEY = 'mapnotes:evolve';
 const PANEL_WIDTH_DEFAULT = 330;
 const PANEL_WIDTH_MIN = 260;
 /** The canvas always keeps at least this much room. */
@@ -89,6 +92,15 @@ interface History extends Snapshot {
   lastAt: number;
 }
 const snapshot = (h: History): Snapshot => ({ graph: h.graph, hidden: h.hidden });
+
+/** The problems besides crossings, when there are any. */
+function qualityExtras(q: LayoutQuality): string {
+  return (
+    (q.edgesThroughNodes ? ` · ${q.edgesThroughNodes} through nodes` : '') +
+    (q.nearEdges ? ` · ${q.nearEdges} close to nodes` : '') +
+    (q.overlaps ? ` · ${q.overlaps} overlaps` : '')
+  );
+}
 
 function storageGet(key: string): string | null {
   try {
@@ -215,6 +227,10 @@ export function App() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [issues, setIssues] = useState<Issues | null>(null);
   const [layoutName, setLayoutName] = useState<LayoutName>('auto');
+  const [evolveSettings, setEvolveSettings] = useState(() => parseEvolveSettings(storageGet(EVOLVE_KEY)));
+  useEffect(() => storageSet(EVOLVE_KEY, JSON.stringify(evolveSettings)), [evolveSettings]);
+  /** The best layout so far while the genetic layout evolves. */
+  const [evolution, setEvolution] = useState<LayoutProgress | null>(null);
   /** Live repulsion is on: nodes push each other apart until it is switched off. */
   const [floating, setFloating] = useState(false);
   const land = useCallback((save = true) => {
@@ -555,18 +571,32 @@ export function App() {
   const layoutScope = movingNodeIds.length >= 2 ? movingNodeIds : null;
   /** Layout runs in flight (a newer run can start before an older one finishes). */
   const [layoutsRunning, setLayoutsRunning] = useState(0);
+  /** Crossings and such of the graph as drawn, measured shortly after it changes. */
+  const [quality, setQuality] = useState<LayoutQuality | null>(null);
+  useEffect(() => {
+    const timer = setTimeout(() => setQuality(canvas.current?.measure(evolveSettings.clearance) ?? null), 500);
+    return () => clearTimeout(timer);
+  }, [visibleGraph, hidden, theme, evolveSettings.clearance]);
   const runLayout = useCallback(
     async (name: LayoutName) => {
       setLayoutsRunning((n) => n + 1);
       let result;
       try {
-        result = await canvas.current?.runLayout(name, layoutScope ?? undefined);
+        result = await canvas.current?.runLayout(
+          name,
+          layoutScope ?? undefined,
+          name === 'genetic'
+            ? { evolve: evolveSettings, clearance: evolveSettings.clearance, onProgress: setEvolution }
+            : { clearance: evolveSettings.clearance },
+        );
       } catch (err) {
         toast(`Layout failed: ${(err as Error).message}`, 'error');
       } finally {
         setLayoutsRunning((n) => n - 1);
+        setEvolution(null);
       }
       if (!result) return;
+      setQuality(result.after);
       const { before, after } = result;
       const what = name === 'auto' ? `Picked ${layoutLabel(result.algorithm)}` : layoutLabel(name);
       const scope = layoutScope ? ` (${layoutScope.length} selected nodes)` : '';
@@ -577,7 +607,7 @@ export function App() {
           : `edge crossings ${before.crossings} → ${after.crossings}`;
       toast(`${what}${scope}: ${crossings}`);
     },
-    [layoutScope, toast],
+    [evolveSettings, layoutScope, toast],
   );
 
   /** Switches live repulsion on for the selected nodes (or all of them), or off again. */
@@ -1100,18 +1130,25 @@ export function App() {
                 >
                   {LAYOUTS.map((l) => <option key={l.name} value={l.name}>{l.label}</option>)}
                 </select>
-                <button
-                  className={`btn ghost icon${layoutsRunning ? ' busy' : ''}`}
-                  disabled={layoutsRunning > 0}
-                  data-tip="Run it again (L)"
-                  aria-label={layoutScope ? 'Run layout on selected nodes' : 'Run layout again'}
-                  onClick={() => void runLayout(layoutName)}
-                >
-                  <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8M21 3v5h-5M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16M8 16H3v5" />
-                  </svg>
-                </button>
+                {evolution ? (
+                  <button className="btn" data-tip="Stop evolving and keep the best layout so far" onClick={() => canvas.current?.stopLayout()}>
+                    <Icon name="stop" /> Stop
+                  </button>
+                ) : (
+                  <button
+                    className={`btn ghost icon${layoutsRunning ? ' busy' : ''}`}
+                    disabled={layoutsRunning > 0}
+                    data-tip={layoutName === 'genetic' ? 'Run it again, evolving from the current layout (L)' : 'Run it again (L)'}
+                    aria-label={layoutScope ? 'Run layout on selected nodes' : 'Run layout again'}
+                    onClick={() => void runLayout(layoutName)}
+                  >
+                    <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                      <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8M21 3v5h-5M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16M8 16H3v5" />
+                    </svg>
+                  </button>
+                )}
                 <span className="view-count">{layoutScope ? `${layoutScope.length} selected nodes` : 'Whole graph'}</span>
+                {layoutName === 'genetic' && <EvolveControls settings={evolveSettings} onChange={setEvolveSettings} />}
               </div>
             )}
           </div>
@@ -1392,6 +1429,29 @@ export function App() {
             >
               <span className="dot" /> <span className="sync-label">Browser storage</span>
             </div>
+          )}
+          {evolution ? (
+            <span
+              className="layout-stats evolving"
+              aria-live="off"
+              data-tip={
+                evolution.exploring
+                  ? 'Exploring: whenever it gets stuck it keeps the best layout of that try and starts over. Crossings since it started (and of the best found), edges drawn through or close to other nodes, overlapping nodes'
+                  : 'Refining the best layout: crossings since it started, edges drawn through or close to other nodes, overlapping nodes'
+              }
+            >
+              Gen {evolution.generation} · {evolution.exploring ? 'exploring' : 'refining'} · {evolution.before.crossings} →{' '}
+              <b>{evolution.quality.crossings}</b> crossings
+              {evolution.exploring && ` (best ${evolution.best.crossings})`}
+              {qualityExtras(evolution.quality)}
+            </span>
+          ) : (
+            quality && (
+              <span className="layout-stats" data-tip="Edge crossings, edges drawn through or close to other nodes (closer than the edge clearance), and overlapping nodes">
+                {quality.crossings} crossing{quality.crossings === 1 ? '' : 's'}
+                {qualityExtras(quality)}
+              </span>
+            )
           )}
           {hidden.length > 0 && (
             <button

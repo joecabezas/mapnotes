@@ -3,7 +3,9 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 're
 import type { Graph, Position } from '../../shared/model';
 import { arrange, type ArrangeOp } from '../arrange';
 import { type Box, zoneAround } from '../hull';
-import { computeLayout, type LayoutName, type LayoutResult } from '../layout';
+import type { EvolveSettings } from '../genetic';
+import { computeLayout, type LayoutName, type LayoutProgress, type LayoutResult, measureCanvas } from '../layout';
+import type { LayoutQuality } from '../layoutQuality';
 import { isArced } from '../layoutQuality';
 import { type Body, stepRepulsion } from '../repel';
 import { useIcons } from '../icons';
@@ -23,7 +25,15 @@ export interface GraphCanvasHandle {
    * Lays out the given nodes (at least two; others stay put), or the whole graph, saving the new
    * positions as one undo step. Resolves to null when nothing was laid out or a newer run took over.
    */
-  runLayout(name: LayoutName, ids?: string[]): Promise<LayoutResult | null>;
+  runLayout(
+    name: LayoutName,
+    ids?: string[],
+    options?: { evolve?: Partial<EvolveSettings>; clearance?: number; onProgress?(progress: LayoutProgress): void },
+  ): Promise<LayoutResult | null>;
+  /** Stops an evolving layout early; it finishes with the best layout so far. */
+  stopLayout(): void;
+  /** Crossings, edges through or near nodes, and overlaps of the graph as drawn now. */
+  measure(clearance?: number): LayoutQuality | null;
   center(sel: Selection): void;
   exportPng(): string;
   /** Aligns or distributes the given nodes, saving their new positions as one undo step. */
@@ -274,7 +284,14 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
   /** Bumped by every layout run, so a slow one finishing late doesn't undo a newer one. */
   const layoutRun = useRef(0);
 
-  async function runLayout(name: LayoutName, ids?: string[]): Promise<LayoutResult | null> {
+  /** Stops the evolving layout in flight, if any. */
+  const layoutAbort = useRef<AbortController | null>(null);
+
+  async function runLayout(
+    name: LayoutName,
+    ids?: string[],
+    options: { evolve?: Partial<EvolveSettings>; clearance?: number; onProgress?(progress: LayoutProgress): void } = {},
+  ): Promise<LayoutResult | null> {
     const cy = cyRef.current;
     // Hidden nodes stay where they are; clusters follow their members.
     const visible = cy?.nodes(':visible').not('.cluster');
@@ -283,7 +300,55 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
     const subset = wanted.size >= 2 ? visible.filter((n) => wanted.has(n.data('refId'))) : null;
     const nodes = subset ?? visible;
     const run = ++layoutRun.current;
-    const result = await computeLayout(cy, nodes, name);
+    layoutAbort.current?.abort();
+    const abort = new AbortController();
+    layoutAbort.current = abort;
+    // An evolving layout is shown generation by generation; only the final one is saved.
+    const preview = (positions: Record<string, Position>, progress: LayoutProgress) => {
+      if (run !== layoutRun.current || cy.destroyed()) return;
+      options.onProgress?.(progress);
+      // Where everything will be, shape and label included.
+      let x1 = Infinity;
+      let x2 = -Infinity;
+      let y1 = Infinity;
+      let y2 = -Infinity;
+      visible.forEach((n) => {
+        if (n.removed()) return;
+        const p = n.position();
+        const to = positions[n.data('refId')] ?? p;
+        const bb = n.boundingBox({ includeLabels: true, includeOverlays: false });
+        x1 = Math.min(x1, bb.x1 + to.x - p.x);
+        x2 = Math.max(x2, bb.x2 + to.x - p.x);
+        y1 = Math.min(y1, bb.y1 + to.y - p.y);
+        y2 = Math.max(y2, bb.y2 + to.y - p.y);
+        if (to === p) return;
+        n.stop();
+        n.animate({ position: to }, { duration: 120 });
+      });
+      // Zoom out (never in, so it doesn't jitter) when the layout outgrows the screen.
+      const pad = 40;
+      const view = cy.extent();
+      const margin = pad / cy.zoom();
+      if (x1 < view.x1 + margin || x2 > view.x2 - margin || y1 < view.y1 + margin || y2 > view.y2 - margin) {
+        const zoom = Math.min(cy.zoom(), (cy.width() - 2 * pad) / (x2 - x1), (cy.height() - 2 * pad) / (y2 - y1));
+        cy.stop();
+        cy.animate(
+          { zoom, pan: { x: cy.width() / 2 - (zoom * (x1 + x2)) / 2, y: cy.height() / 2 - (zoom * (y1 + y2)) / 2 } },
+          { duration: 120 },
+        );
+      }
+    };
+    let result: LayoutResult;
+    try {
+      result = await computeLayout(cy, nodes, name, {
+        evolve: options.evolve,
+        clearance: options.clearance,
+        onProgress: preview,
+        signal: abort.signal,
+      });
+    } finally {
+      if (layoutAbort.current === abort) layoutAbort.current = null;
+    }
     if (run !== layoutRun.current || cy.destroyed()) return null;
     const live = nodes.filter((n) => !n.removed() && result.positions[n.data('refId')] !== undefined);
     const layout = live.layout({
@@ -308,6 +373,11 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
       cy.animate({ fit: { eles: selected.nonempty() ? selected : cy.elements(':visible'), padding: 50 }, duration: 300 });
     },
     runLayout,
+    stopLayout: () => layoutAbort.current?.abort(),
+    measure: (clearance) => {
+      const cy = cyRef.current;
+      return cy && !cy.destroyed() ? measureCanvas(cy, clearance) : null;
+    },
     center(sel) {
       const cy = cyRef.current;
       if (!cy || !sel || sel.kind === 'nodes') return;

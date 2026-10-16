@@ -21,11 +21,21 @@ export interface LayoutQuality {
   edgesThroughNodes: number;
   /** Pairs of nodes whose boxes overlap. */
   overlaps: number;
+  /** Edges passing closer than the clearance to a node other than their own ends (but not through it), counted per node. */
+  nearEdges: number;
+  /** How close those are: each adds from 0 (at the clearance) to 1 (touching). */
+  nearness: number;
 }
 
-/** One number to compare layouts by; lower is better. Overlaps and edges hidden under nodes read worse than crossings. */
+/** How close an edge may pass to a node that isn't one of its ends before it reads as touching it. */
+export const CLEARANCE = 24;
+
+/**
+ * One number to compare layouts by; lower is better. Overlaps and edges hidden under nodes read worse
+ * than crossings; an edge passing close to a node counts up to a crossing, the closer the more.
+ */
 export function qualityScore(q: LayoutQuality): number {
-  return q.crossings + 2 * q.edgesThroughNodes + 3 * q.overlaps;
+  return q.crossings + 2 * q.edgesThroughNodes + 3 * q.overlaps + q.nearness;
 }
 
 /**
@@ -38,7 +48,7 @@ export const ARC_MIN_DX = 100;
 export const isArced = (a: Position, b: Position) => Math.abs(b.y - a.y) < ARC_MAX_DY && Math.abs(b.x - a.x) > ARC_MIN_DX;
 
 /** Box edges are pulled in by this much before testing, so lines that only graze a node don't count. */
-const SLACK = 4;
+export const SLACK = 4;
 
 type Segment = { a: Position; b: Position; source: string; target: string };
 
@@ -79,14 +89,54 @@ export function segmentHitsBox(a: Position, b: Position, box: { x1: number; x2: 
   );
 }
 
+type Box = { x1: number; x2: number; y1: number; y2: number };
+
+function pointSegmentDistance(x: number, y: number, a: Position, b: Position): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const length2 = dx * dx + dy * dy;
+  const t = length2 ? Math.max(0, Math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / length2)) : 0;
+  return Math.hypot(x - a.x - t * dx, y - a.y - t * dy);
+}
+
+function pointBoxDistance(p: Position, box: Box): number {
+  return Math.hypot(Math.max(box.x1 - p.x, 0, p.x - box.x2), Math.max(box.y1 - p.y, 0, p.y - box.y2));
+}
+
 /**
- * Measures `positions` against `edges`. Nodes without a position are skipped, as are
+ * The shortest distance between a segment and a box, or 0 when they touch; distances of `limit` or
+ * more come back as `limit` (cheaply, when the box is that far from the segment's bounds).
+ */
+export function segmentBoxDistance(a: Position, b: Position, box: Box, limit = Infinity): number {
+  if (
+    box.x1 - limit > Math.max(a.x, b.x) ||
+    box.x2 + limit < Math.min(a.x, b.x) ||
+    box.y1 - limit > Math.max(a.y, b.y) ||
+    box.y2 + limit < Math.min(a.y, b.y)
+  )
+    return limit;
+  if (segmentHitsBox(a, b, box)) return 0;
+  // Two shapes apart are closest at a corner of one of them.
+  const d = Math.min(
+    pointBoxDistance(a, box),
+    pointBoxDistance(b, box),
+    pointSegmentDistance(box.x1, box.y1, a, b),
+    pointSegmentDistance(box.x2, box.y1, a, b),
+    pointSegmentDistance(box.x1, box.y2, a, b),
+    pointSegmentDistance(box.x2, box.y2, a, b),
+  );
+  return Math.min(d, limit);
+}
+
+/**
+ * Measures `positions` against `edges`; edges closer than `clearance` to a node count as near it. Nodes without a position are skipped, as are
  * self-loops and edges whose ends sit on the same spot.
  */
 export function measureLayout(
   positions: Record<string, Position>,
   extents: Record<string, Extent>,
   edges: QualityEdge[],
+  clearance = CLEARANCE,
 ): LayoutQuality {
   const segments: Segment[] = [];
   for (const e of edges) {
@@ -113,14 +163,23 @@ export function measureLayout(
   }
 
   let edgesThroughNodes = 0;
+  let nearEdges = 0;
+  let nearness = 0;
   for (const s of segments) {
     if (isArced(s.a, s.b)) continue;
-    const hit = boxes.some(
-      (box) =>
-        box.id !== s.source &&
-        box.id !== s.target &&
-        segmentHitsBox(s.a, s.b, { x1: box.x1 + SLACK, x2: box.x2 - SLACK, y1: box.y1 + SLACK, y2: box.y2 - SLACK }),
-    );
+    let hit = false;
+    for (const box of boxes) {
+      if (box.id === s.source || box.id === s.target) continue;
+      if (segmentHitsBox(s.a, s.b, { x1: box.x1 + SLACK, x2: box.x2 - SLACK, y1: box.y1 + SLACK, y2: box.y2 - SLACK }))
+        hit = true;
+      else if (clearance > 0) {
+        const d = segmentBoxDistance(s.a, s.b, box, clearance);
+        if (d < clearance) {
+          nearEdges++;
+          nearness += 1 - d / clearance;
+        }
+      }
+    }
     if (hit) edgesThroughNodes++;
   }
 
@@ -133,7 +192,7 @@ export function measureLayout(
     }
   }
 
-  return { crossings, edgesThroughNodes, overlaps };
+  return { crossings, edgesThroughNodes, overlaps, nearEdges, nearness };
 }
 
 /**

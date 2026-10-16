@@ -1,7 +1,8 @@
 import cytoscape, { type Core, type NodeCollection, type NodeSingular } from 'cytoscape';
 import fcose from 'cytoscape-fcose';
 import type { Position } from '../shared/model';
-import { type Extent, type LayoutQuality, measureLayout, type QualityEdge, qualityScore, refineLayers } from './layoutQuality';
+import { evolveLayout, type EvolveSettings } from './genetic';
+import { CLEARANCE, type Extent, type LayoutQuality, measureLayout, type QualityEdge, qualityScore, refineLayers } from './layoutQuality';
 
 /** ELK is large (~1.5 MB), so it's only downloaded the first time an ELK layout runs. */
 let elkReady: Promise<void> | null = null;
@@ -14,6 +15,7 @@ cytoscape.use(fcose);
 
 export const LAYOUTS = [
   { name: 'auto', label: 'Fewest crossings' },
+  { name: 'genetic', label: 'Evolved (genetic)' },
   { name: 'layered', label: 'Layered ↓' },
   { name: 'layered-right', label: 'Layered →' },
   { name: 'tree', label: 'Tree' },
@@ -24,9 +26,9 @@ export const LAYOUTS = [
   { name: 'grid', label: 'Grid' },
 ] as const;
 export type LayoutName = (typeof LAYOUTS)[number]['name'];
-type Algorithm = Exclude<LayoutName, 'auto'>;
+type Algorithm = Exclude<LayoutName, 'auto' | 'genetic'>;
 
-export const layoutLabel = (name: LayoutName) => LAYOUTS.find((l) => l.name === name)!.label;
+export const layoutLabel = (name: LayoutName | Algorithm) => LAYOUTS.find((l) => l.name === name)!.label;
 
 /**
  * What `auto` tries, best first: on equal scores the earlier one wins. Force-directed starts from
@@ -40,8 +42,8 @@ const LAYER_AXIS: Partial<Record<Algorithm, 'x' | 'y'>> = { layered: 'x', 'layer
 export interface LayoutResult {
   /** New positions of the laid-out nodes, by node id. */
   positions: Record<string, Position>;
-  /** The algorithm used (what `auto` picked). */
-  algorithm: Algorithm;
+  /** The algorithm used (what `auto` picked; `genetic` when evolving beat every seed). */
+  algorithm: Algorithm | 'genetic';
   before: LayoutQuality;
   after: LayoutQuality;
 }
@@ -152,10 +154,8 @@ function centreOf(positions: Record<string, Position>, extents: Record<string, E
  * are, and a partial layout is centred where the nodes were. Quality is measured over the whole visible
  * graph; hidden nodes and their edges are ignored.
  */
-export async function computeLayout(cy: Core, nodes: NodeCollection, name: LayoutName): Promise<LayoutResult> {
-  const candidates: Algorithm[] = name === 'auto' ? AUTO_CANDIDATES : [name];
-  if (candidates.some((c) => ELK_LAYOUTS.has(c))) await loadElk();
-
+/** Where the visible nodes are, how far each one's shape and label reach, and the visible edges. */
+function readCanvas(cy: Core) {
   // What's visible of each node, measured on the real canvas (labels can be much wider than nodes).
   const extents: Record<string, Extent> = {};
   const current: Record<string, Position> = {};
@@ -172,6 +172,52 @@ export async function computeLayout(cy: Core, nodes: NodeCollection, name: Layou
     source: e.source().data('refId') as string,
     target: e.target().data('refId') as string,
   }));
+  return { extents, current, allEdges };
+}
+
+/** The quality of the graph as it's drawn now (visible nodes and edges only). */
+export function measureCanvas(cy: Core, clearance?: number): LayoutQuality {
+  const { extents, current, allEdges } = readCanvas(cy);
+  return measureLayout(current, extents, allEdges, clearance);
+}
+
+export interface LayoutProgress {
+  generation: number;
+  /** Of the layout shown, over the whole visible graph. */
+  quality: LayoutQuality;
+  /** Still exploring: the layout shown may be worse than the best found. */
+  exploring: boolean;
+  /** Of the best layout found so far. */
+  best: LayoutQuality;
+  /** Before the layout started. */
+  before: LayoutQuality;
+}
+
+export interface LayoutOptions {
+  /** How close an edge may pass a node before it counts against a layout (see `measureLayout`). */
+  clearance?: number;
+  /** For `genetic`. */
+  evolve?: Partial<EvolveSettings>;
+  /** For `genetic`: called with the generation's best layout as it evolves. */
+  onProgress?(positions: Record<string, Position>, progress: LayoutProgress): void;
+  /** For `genetic`: stops evolving; the best layout so far is used. */
+  signal?: AbortSignal;
+}
+
+export async function computeLayout(
+  cy: Core,
+  nodes: NodeCollection,
+  name: LayoutName,
+  options: LayoutOptions = {},
+): Promise<LayoutResult> {
+  // `genetic` starts from what the other layouts make (and from the current layout), and evolves those.
+  const candidates: Algorithm[] = name === 'auto' || name === 'genetic' ? AUTO_CANDIDATES : [name];
+  if (candidates.some((c) => ELK_LAYOUTS.has(c))) await loadElk();
+
+  const { extents, current, allEdges } = readCanvas(cy);
+  const { clearance = CLEARANCE } = options;
+  const measure = (positions: Record<string, Position>) => measureLayout(positions, extents, allEdges, clearance);
+  const before = measure(current);
 
   // A headless copy where each node is a plain box the size of node + label, centred on that box.
   // It keeps the canvas's element ids (`n:` / `e:` prefixed), so nodes and edges can't clash.
@@ -200,8 +246,9 @@ export async function computeLayout(cy: Core, nodes: NodeCollection, name: Layou
     ],
   });
 
+  const seeds: Record<string, Position>[] = [Object.fromEntries([...ids].map((id) => [id, current[id]]))];
   const oldCentre = centreOf(Object.fromEntries([...ids].map((id) => [id, current[id]])), extents);
-  let best: { algorithm: Algorithm; positions: Record<string, Position>; quality: LayoutQuality; score: number } | null =
+  let best: { algorithm: Algorithm | 'genetic'; positions: Record<string, Position>; quality: LayoutQuality; score: number } | null =
     null;
   try {
     for (const algorithm of candidates) {
@@ -229,8 +276,9 @@ export async function computeLayout(cy: Core, nodes: NodeCollection, name: Layou
       const axis = LAYER_AXIS[algorithm];
       if (axis) Object.assign(positions, refineLayers({ ...current, ...positions }, extents, allEdges, ids, axis));
 
-      const quality = measureLayout({ ...current, ...positions }, extents, allEdges);
+      const quality = measure({ ...current, ...positions });
       const score = qualityScore(quality);
+      seeds.push(positions);
       if (!best || score < best.score) best = { algorithm, positions, quality, score };
       if (score === 0) break; // Can't do better.
     }
@@ -238,10 +286,32 @@ export async function computeLayout(cy: Core, nodes: NodeCollection, name: Layou
     sandbox.destroy();
   }
 
+  if (name === 'genetic' && best!.score > 0) {
+    const { onProgress } = options;
+    const positions = await evolveLayout(current, extents, allEdges, ids, seeds, {
+      ...options.evolve,
+      clearance,
+      signal: options.signal,
+      onProgress:
+        onProgress &&
+        ((positions, { generation, exploring, best }) =>
+          onProgress(positions, {
+            generation,
+            quality: measure({ ...current, ...positions }),
+            exploring,
+            best: measure({ ...current, ...best }),
+            before,
+          })),
+    });
+    const quality = measure({ ...current, ...positions });
+    const score = qualityScore(quality);
+    if (score < best!.score) best = { algorithm: 'genetic', positions, quality, score };
+  }
+
   return {
     positions: best!.positions,
     algorithm: best!.algorithm,
-    before: measureLayout(current, extents, allEdges),
+    before,
     after: best!.quality,
   };
 }

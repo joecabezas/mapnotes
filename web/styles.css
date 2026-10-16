@@ -342,7 +342,7 @@ button.sync.error {
   left: 0;
   z-index: 6;
   width: max-content;
-  max-width: min(360px, calc(100% - var(--inspector-width) - 12px));
+  max-width: min(560px, calc(100% - var(--inspector-width) - 12px));
   padding: 6px 10px;
   background: var(--panel);
   border: 1px solid var(--border);
@@ -1430,6 +1430,56 @@ button.sync.error {
 }
 .toolbar-panel select {
   width: min(240px, 60vw);
+}
+.toolbar-panel:has(.evolve-controls) {
+  flex-wrap: wrap;
+  width: 370px;
+}
+.evolve-controls {
+  flex-basis: 100%;
+  display: grid;
+  grid-template-columns: auto 1fr 3.5em;
+  align-items: center;
+  gap: 6px 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+}
+.evolve-field {
+  display: contents;
+}
+.evolve-field span {
+  color: var(--muted);
+}
+.evolve-field input {
+  width: 100%;
+  accent-color: var(--accent);
+}
+.evolve-field output {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.evolve-foot {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.evolve-foot label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.layout-stats {
+  flex: none;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.layout-stats.evolving {
+  color: var(--accent);
 }
 .view-count {
   white-space: nowrap;

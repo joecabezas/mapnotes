@@ -1,7 +1,13 @@
 import cytoscape from 'cytoscape';
 import { describe, expect, it } from 'vitest';
 import { computeLayout } from '../web/layout.ts';
-import { measureLayout, refineLayers, segmentHitsBox, segmentsCross } from '../web/layoutQuality.ts';
+import {
+  measureLayout,
+  refineLayers,
+  segmentBoxDistance,
+  segmentHitsBox,
+  segmentsCross,
+} from '../web/layoutQuality.ts';
 
 const box = (w = 20, h = 20) => ({ left: w / 2, right: w / 2, top: h / 2, bottom: h / 2 });
 
@@ -25,9 +31,21 @@ describe('segmentHitsBox', () => {
   });
 });
 
+describe('segmentBoxDistance', () => {
+  const b = { x1: 0, x2: 10, y1: 0, y2: 10 };
+  it('measures to the nearest side or corner', () => {
+    expect(segmentBoxDistance({ x: -5, y: 20 }, { x: 15, y: 20 }, b)).toBe(10);
+    expect(segmentBoxDistance({ x: 13, y: -10 }, { x: 13, y: 30 }, b)).toBe(3);
+    expect(segmentBoxDistance({ x: 20, y: 10 }, { x: 10, y: 20 }, b)).toBeCloseTo(Math.SQRT2 * 5);
+    expect(segmentBoxDistance({ x: -5, y: 5 }, { x: 15, y: 5 }, b)).toBe(0);
+    // Far away: capped at the limit.
+    expect(segmentBoxDistance({ x: 500, y: 500 }, { x: 600, y: 500 }, b, 24)).toBe(24);
+  });
+});
+
 describe('measureLayout', () => {
-  it('counts crossings, edges through nodes and overlapping nodes', () => {
-    // a-b and c-d cross in an X; e sits on the a-b line; f overlaps g.
+  it('counts crossings, edges through or near nodes and overlapping nodes', () => {
+    // a-b and c-d cross in an X; e sits on the a-b line, 15 from a-c and ~21 from c-d; f overlaps g.
     const positions = {
       a: { x: 0, y: 0 },
       b: { x: 100, y: 100 },
@@ -44,7 +62,20 @@ describe('measureLayout', () => {
       { source: 'a', target: 'c' }, // shares a node with both: never a crossing
       { source: 'f', target: 'f' }, // self-loop: ignored
     ]);
-    expect(q).toEqual({ crossings: 1, edgesThroughNodes: 1, overlaps: 1 });
+    expect(q).toMatchObject({ crossings: 1, edgesThroughNodes: 1, overlaps: 1, nearEdges: 2 });
+    // 15 and ~21 away of 24.
+    expect(q.nearness).toBeCloseTo(9 / 24 + (1 - 30 / Math.SQRT2 / 24));
+  });
+
+  it('counts edges passing closer than the clearance', () => {
+    // Vertical: a long level edge would be drawn as an arc, which isn't measured.
+    const positions = { a: { x: 0, y: 0 }, b: { x: 0, y: 300 }, c: { x: 30, y: 150 } };
+    const extents = Object.fromEntries(Object.keys(positions).map((id) => [id, box()]));
+    const edges = [{ source: 'a', target: 'b' }];
+    // c's box starts 20 right of the edge.
+    expect(measureLayout(positions, extents, edges).nearEdges).toBe(1);
+    expect(measureLayout(positions, extents, edges, 10).nearEdges).toBe(0);
+    expect(measureLayout(positions, extents, edges, 0).nearEdges).toBe(0);
   });
 });
 
@@ -69,7 +100,7 @@ describe('refineLayers', () => {
   it('swaps nodes within a layer to remove crossings', () => {
     const moved = refineLayers(positions, extents, edges, Object.keys(positions), 'x');
     expect(measureLayout(positions, extents, edges).crossings).toBe(4);
-    expect(measureLayout({ ...positions, ...moved }, extents, edges)).toEqual({ crossings: 0, edgesThroughNodes: 0, overlaps: 0 });
+    expect(measureLayout({ ...positions, ...moved }, extents, edges)).toEqual({ crossings: 0, edgesThroughNodes: 0, overlaps: 0, nearEdges: 0, nearness: 0 });
     // Nodes only move along their layer.
     for (const [id, p] of Object.entries(moved)) expect(p.y).toBe(positions[id as keyof typeof positions].y);
   });
@@ -108,7 +139,7 @@ describe('computeLayout', () => {
     const cy = tangled();
     const result = await computeLayout(cy, cy.nodes(), 'auto');
     expect(result.before.crossings).toBeGreaterThan(0);
-    expect(result.after).toEqual({ crossings: 0, edgesThroughNodes: 0, overlaps: 0 });
+    expect(result.after).toEqual({ crossings: 0, edgesThroughNodes: 0, overlaps: 0, nearEdges: 0, nearness: 0 });
     expect(Object.keys(result.positions).sort()).toEqual(['a', 'b', 'c', 'd', 'p', 'q']);
   });
 
