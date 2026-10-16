@@ -6,6 +6,7 @@ import { GraphCanvas, type GraphCanvasHandle, type Selection } from './component
 import { LAYOUTS, layoutLabel, type LayoutName, type LayoutProgress } from './layout';
 import type { LayoutQuality } from './layoutQuality';
 import { EvolveControls, parseEvolveSettings } from './components/EvolveControls';
+import { InsertControls, parseInsertSettings } from './components/InsertControls';
 import { HelpDialog } from './components/HelpDialog';
 import { Inspector } from './components/Inspector';
 import { McpDialog } from './components/McpDialog';
@@ -31,6 +32,7 @@ const LOCAL_KEY = 'mapnotes:graph';
 const THEME_KEY = 'mapnotes:theme';
 const PANEL_WIDTH_KEY = 'mapnotes:panelWidth';
 const EVOLVE_KEY = 'mapnotes:evolve';
+const INSERT_KEY = 'mapnotes:insert';
 const PANEL_WIDTH_DEFAULT = 330;
 const PANEL_WIDTH_MIN = 260;
 /** The canvas always keeps at least this much room. */
@@ -229,7 +231,9 @@ export function App() {
   const [layoutName, setLayoutName] = useState<LayoutName>('auto');
   const [evolveSettings, setEvolveSettings] = useState(() => parseEvolveSettings(storageGet(EVOLVE_KEY)));
   useEffect(() => storageSet(EVOLVE_KEY, JSON.stringify(evolveSettings)), [evolveSettings]);
-  /** The best layout so far while the genetic layout evolves. */
+  const [insertSettings, setInsertSettings] = useState(() => parseInsertSettings(storageGet(INSERT_KEY)));
+  useEffect(() => storageSet(INSERT_KEY, JSON.stringify(insertSettings)), [insertSettings]);
+  /** The layout shown while the genetic layout evolves or the insertion layout grows. */
   const [evolution, setEvolution] = useState<LayoutProgress | null>(null);
   /** Live repulsion is on: nodes push each other apart until it is switched off. */
   const [floating, setFloating] = useState(false);
@@ -573,10 +577,12 @@ export function App() {
   const [layoutsRunning, setLayoutsRunning] = useState(0);
   /** Crossings and such of the graph as drawn, measured shortly after it changes. */
   const [quality, setQuality] = useState<LayoutQuality | null>(null);
+  /** Edges closer than this to a node count as near it: the picked layout's setting. */
+  const clearance = layoutName === 'insertion' ? insertSettings.clearance : evolveSettings.clearance;
   useEffect(() => {
-    const timer = setTimeout(() => setQuality(canvas.current?.measure(evolveSettings.clearance) ?? null), 500);
+    const timer = setTimeout(() => setQuality(canvas.current?.measure(clearance) ?? null), 500);
     return () => clearTimeout(timer);
-  }, [visibleGraph, hidden, theme, evolveSettings.clearance]);
+  }, [visibleGraph, hidden, theme, clearance]);
   const runLayout = useCallback(
     async (name: LayoutName) => {
       setLayoutsRunning((n) => n + 1);
@@ -587,7 +593,9 @@ export function App() {
           layoutScope ?? undefined,
           name === 'genetic'
             ? { evolve: evolveSettings, clearance: evolveSettings.clearance, onProgress: setEvolution }
-            : { clearance: evolveSettings.clearance },
+            : name === 'insertion'
+              ? { insert: insertSettings, clearance: insertSettings.clearance, onProgress: setEvolution }
+              : { clearance },
         );
       } catch (err) {
         toast(`Layout failed: ${(err as Error).message}`, 'error');
@@ -607,7 +615,7 @@ export function App() {
           : `edge crossings ${before.crossings} → ${after.crossings}`;
       toast(`${what}${scope}: ${crossings}`);
     },
-    [evolveSettings, layoutScope, toast],
+    [clearance, evolveSettings, insertSettings, layoutScope, toast],
   );
 
   /** Switches live repulsion on for the selected nodes (or all of them), or off again. */
@@ -1131,14 +1139,20 @@ export function App() {
                   {LAYOUTS.map((l) => <option key={l.name} value={l.name}>{l.label}</option>)}
                 </select>
                 {evolution ? (
-                  <button className="btn" data-tip="Stop evolving and keep the best layout so far" onClick={() => canvas.current?.stopLayout()}>
+                  <button className="btn" data-tip="Stop and keep the best layout so far" onClick={() => canvas.current?.stopLayout()}>
                     <Icon name="stop" /> Stop
                   </button>
                 ) : (
                   <button
                     className={`btn ghost icon${layoutsRunning ? ' busy' : ''}`}
                     disabled={layoutsRunning > 0}
-                    data-tip={layoutName === 'genetic' ? 'Run it again, evolving from the current layout (L)' : 'Run it again (L)'}
+                    data-tip={
+                      layoutName === 'genetic'
+                        ? 'Run it again, evolving from the current layout (L)'
+                        : layoutName === 'insertion'
+                          ? 'Run it again, inserting the nodes afresh (L)'
+                          : 'Run it again (L)'
+                    }
                     aria-label={layoutScope ? 'Run layout on selected nodes' : 'Run layout again'}
                     onClick={() => void runLayout(layoutName)}
                   >
@@ -1149,6 +1163,7 @@ export function App() {
                 )}
                 <span className="view-count">{layoutScope ? `${layoutScope.length} selected nodes` : 'Whole graph'}</span>
                 {layoutName === 'genetic' && <EvolveControls settings={evolveSettings} onChange={setEvolveSettings} />}
+                {layoutName === 'insertion' && <InsertControls settings={insertSettings} onChange={setInsertSettings} />}
               </div>
             )}
           </div>
@@ -1430,7 +1445,26 @@ export function App() {
               <span className="dot" /> <span className="sync-label">Browser storage</span>
             </div>
           )}
-          {evolution ? (
+          {evolution?.layout === 'insertion' ? (
+            <span
+              className="layout-stats evolving"
+              aria-live="off"
+              data-tip={
+                evolution.inserting
+                  ? 'Inserting the nodes one by one, each where it adds the fewest crossings'
+                  : 'Taking out patches of the layout and inserting them again, keeping what’s no worse: crossings since it started, edges drawn through or close to other nodes, overlapping nodes'
+              }
+            >
+              {evolution.inserting ? (
+                `Inserting ${evolution.inserting.placed} of ${evolution.inserting.total} nodes`
+              ) : (
+                <>
+                  Round {evolution.generation} · repairing · {evolution.before.crossings} → <b>{evolution.quality.crossings}</b> crossings
+                  {qualityExtras(evolution.quality)}
+                </>
+              )}
+            </span>
+          ) : evolution ? (
             <span
               className="layout-stats evolving"
               aria-live="off"

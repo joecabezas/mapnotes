@@ -55,7 +55,9 @@ export function HelpDialog({
             <li>
               <b>Arrange</b>: drag nodes around, or pick an automatic layout (<em>Fewest crossings</em> tries several and keeps
               the one with the fewest edge crossings; <em>Evolved (genetic)</em> breeds those into better ones while you watch,
-              exploring first, then refining the best, with its settings in the panel and the crossings in the status bar). With two or more nodes selected, the layout only moves those.
+              exploring first, then refining the best, with its settings in the panel and the crossings in the status bar;
+              <em>Grown (insertion)</em> places the nodes one at a time where they add the fewest crossings, then keeps
+              re-inserting patches of the layout). With two or more nodes selected, the layout only moves those.
               <em>Repel</em> is a switch: while it is on, those nodes float apart, held together by
               their edges, and dragging one pushes the others away and pulls along the ones connected to it; the rest fade.
               Positions are saved with the graph.

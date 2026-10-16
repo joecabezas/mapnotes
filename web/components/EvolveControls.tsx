@@ -1,17 +1,10 @@
 import { EVOLVE_DEFAULTS, type EvolveSettings } from '../genetic';
 import { Icon } from './Icon';
+import { parseSettings, type Slider, SettingsSliders } from './LayoutSettings';
 
 type NumberSetting = Exclude<keyof EvolveSettings, 'planets'>;
 
-const SLIDERS: {
-  key: NumberSetting;
-  label: string;
-  tip: string;
-  min: number;
-  max: number;
-  step: number;
-  format(v: number): string;
-}[] = [
+const SLIDERS: Slider<NumberSetting>[] = [
   {
     key: 'budgetMs',
     label: 'Time',
@@ -88,16 +81,7 @@ const SLIDERS: {
 
 /** Reads saved settings, keeping only values of the right type. */
 export function parseEvolveSettings(text: string | null): EvolveSettings {
-  const settings = { ...EVOLVE_DEFAULTS };
-  try {
-    const saved = JSON.parse(text ?? '{}') as Record<string, unknown>;
-    for (const key of Object.keys(settings) as (keyof EvolveSettings)[]) {
-      if (typeof saved[key] === typeof settings[key]) Object.assign(settings, { [key]: saved[key] });
-    }
-  } catch {
-    /* not JSON: defaults */
-  }
-  return settings;
+  return parseSettings(text, EVOLVE_DEFAULTS);
 }
 
 /** The genetic layout's settings, shown in the Layout panel while it's picked. */
@@ -110,20 +94,7 @@ export function EvolveControls({
 }) {
   return (
     <div className="evolve-controls">
-      {SLIDERS.map((s) => (
-        <label key={s.key} className="evolve-field" data-tip={s.tip}>
-          <span>{s.label}</span>
-          <input
-            type="range"
-            min={s.min}
-            max={s.max}
-            step={s.step}
-            value={settings[s.key]}
-            onChange={(e) => onChange({ ...settings, [s.key]: Number(e.target.value) })}
-          />
-          <output>{s.format(settings[s.key])}</output>
-        </label>
-      ))}
+      <SettingsSliders sliders={SLIDERS} settings={settings} onChange={onChange} />
       <div className="evolve-foot">
         <label data-tip="Mutation that puts a busy node's neighbours on a ring around it, and starting layouts built that way">
           <input

@@ -2,6 +2,7 @@ import cytoscape, { type Core, type NodeCollection, type NodeSingular } from 'cy
 import fcose from 'cytoscape-fcose';
 import type { Position } from '../shared/model';
 import { evolveLayout, type EvolveSettings } from './genetic';
+import { insertLayout, type InsertSettings } from './insertion';
 import { CLEARANCE, type Extent, type LayoutQuality, measureLayout, type QualityEdge, qualityScore, refineLayers } from './layoutQuality';
 
 /** ELK is large (~1.5 MB), so it's only downloaded the first time an ELK layout runs. */
@@ -16,6 +17,7 @@ cytoscape.use(fcose);
 export const LAYOUTS = [
   { name: 'auto', label: 'Fewest crossings' },
   { name: 'genetic', label: 'Evolved (genetic)' },
+  { name: 'insertion', label: 'Grown (insertion)' },
   { name: 'layered', label: 'Layered ↓' },
   { name: 'layered-right', label: 'Layered →' },
   { name: 'tree', label: 'Tree' },
@@ -26,7 +28,7 @@ export const LAYOUTS = [
   { name: 'grid', label: 'Grid' },
 ] as const;
 export type LayoutName = (typeof LAYOUTS)[number]['name'];
-type Algorithm = Exclude<LayoutName, 'auto' | 'genetic'>;
+type Algorithm = Exclude<LayoutName, 'auto' | 'genetic' | 'insertion'>;
 
 export const layoutLabel = (name: LayoutName | Algorithm) => LAYOUTS.find((l) => l.name === name)!.label;
 
@@ -43,7 +45,7 @@ export interface LayoutResult {
   /** New positions of the laid-out nodes, by node id. */
   positions: Record<string, Position>;
   /** The algorithm used (what `auto` picked; `genetic` when evolving beat every seed). */
-  algorithm: Algorithm | 'genetic';
+  algorithm: Algorithm | 'genetic' | 'insertion';
   before: LayoutQuality;
   after: LayoutQuality;
 }
@@ -182,11 +184,15 @@ export function measureCanvas(cy: Core, clearance?: number): LayoutQuality {
 }
 
 export interface LayoutProgress {
+  layout: 'genetic' | 'insertion';
+  /** Generations evolved, or (insertion) patches taken out and inserted again. */
   generation: number;
   /** Of the layout shown, over the whole visible graph. */
   quality: LayoutQuality;
   /** Still exploring: the layout shown may be worse than the best found. */
   exploring: boolean;
+  /** Insertion, while building the first layout: nodes placed so far, of how many. */
+  inserting?: { placed: number; total: number };
   /** Of the best layout found so far. */
   best: LayoutQuality;
   /** Before the layout started. */
@@ -198,9 +204,11 @@ export interface LayoutOptions {
   clearance?: number;
   /** For `genetic`. */
   evolve?: Partial<EvolveSettings>;
-  /** For `genetic`: called with the generation's best layout as it evolves. */
+  /** For `insertion`. */
+  insert?: Partial<InsertSettings>;
+  /** For `genetic` and `insertion`: called with the layout shown as it evolves or grows. */
   onProgress?(positions: Record<string, Position>, progress: LayoutProgress): void;
-  /** For `genetic`: stops evolving; the best layout so far is used. */
+  /** For `genetic` and `insertion`: stops; the best layout so far is used. */
   signal?: AbortSignal;
 }
 
@@ -211,13 +219,39 @@ export async function computeLayout(
   options: LayoutOptions = {},
 ): Promise<LayoutResult> {
   // `genetic` starts from what the other layouts make (and from the current layout), and evolves those.
-  const candidates: Algorithm[] = name === 'auto' || name === 'genetic' ? AUTO_CANDIDATES : [name];
+  const candidates: Algorithm[] =
+    name === 'auto' || name === 'genetic' ? AUTO_CANDIDATES : name === 'insertion' ? [] : [name];
   if (candidates.some((c) => ELK_LAYOUTS.has(c))) await loadElk();
 
   const { extents, current, allEdges } = readCanvas(cy);
   const { clearance = CLEARANCE } = options;
   const measure = (positions: Record<string, Position>) => measureLayout(positions, extents, allEdges, clearance);
   const before = measure(current);
+
+  if (name === 'insertion') {
+    const ids = nodes.filter((n) => n.visible() && !n.hasClass('cluster')).map((n) => n.data('refId') as string);
+    const { onProgress } = options;
+    const positions = await insertLayout(current, extents, allEdges, ids, {
+      ...options.insert,
+      clearance,
+      signal: options.signal,
+      onProgress:
+        onProgress &&
+        ((positions, { placed, total, rounds }) => {
+          const quality = measure({ ...current, ...positions });
+          onProgress(positions, {
+            layout: 'insertion',
+            generation: rounds,
+            quality,
+            exploring: false,
+            inserting: placed < total ? { placed, total } : undefined,
+            best: quality,
+            before,
+          });
+        }),
+    });
+    return { positions, algorithm: 'insertion', before, after: measure({ ...current, ...positions }) };
+  }
 
   // A headless copy where each node is a plain box the size of node + label, centred on that box.
   // It keeps the canvas's element ids (`n:` / `e:` prefixed), so nodes and edges can't clash.
@@ -296,6 +330,7 @@ export async function computeLayout(
         onProgress &&
         ((positions, { generation, exploring, best }) =>
           onProgress(positions, {
+            layout: 'genetic',
             generation,
             quality: measure({ ...current, ...positions }),
             exploring,

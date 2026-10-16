@@ -143,6 +143,14 @@ describe('computeLayout', () => {
     expect(Object.keys(result.positions).sort()).toEqual(['a', 'b', 'c', 'd', 'p', 'q']);
   });
 
+  it('inserts the nodes one by one', async () => {
+    const cy = tangled();
+    const result = await computeLayout(cy, cy.nodes(), 'insertion', { insert: { budgetMs: 1000 } });
+    expect(result.algorithm).toBe('insertion');
+    expect(result.after).toMatchObject({ crossings: 0, edgesThroughNodes: 0, overlaps: 0 });
+    expect(Object.keys(result.positions).sort()).toEqual(['a', 'b', 'c', 'd', 'p', 'q']);
+  });
+
   it('lays out a selection only, around where it was', async () => {
     const cy = canvas(
       { a: [1000, 1000], b: [1000, 1000], c: [1000, 1000], far: [-500, -500] },

@@ -4,6 +4,7 @@ import type { Graph, Position } from '../../shared/model';
 import { arrange, type ArrangeOp } from '../arrange';
 import { type Box, zoneAround } from '../hull';
 import type { EvolveSettings } from '../genetic';
+import type { InsertSettings } from '../insertion';
 import { computeLayout, type LayoutName, type LayoutProgress, type LayoutResult, measureCanvas } from '../layout';
 import type { LayoutQuality } from '../layoutQuality';
 import { isArced } from '../layoutQuality';
@@ -18,6 +19,13 @@ const eid = (id: string) => `e:${id}`;
 /** One node or edge (shown in the inspector), or several nodes (moved / deleted / styled together). */
 export type Selection = { kind: 'node' | 'edge'; id: string } | { kind: 'nodes'; ids: string[] } | null;
 
+export interface RunLayoutOptions {
+  evolve?: Partial<EvolveSettings>;
+  insert?: Partial<InsertSettings>;
+  clearance?: number;
+  onProgress?(progress: LayoutProgress): void;
+}
+
 export interface GraphCanvasHandle {
   /** Fits the selection in view, or the whole visible graph when nothing is selected. */
   fit(): void;
@@ -28,9 +36,9 @@ export interface GraphCanvasHandle {
   runLayout(
     name: LayoutName,
     ids?: string[],
-    options?: { evolve?: Partial<EvolveSettings>; clearance?: number; onProgress?(progress: LayoutProgress): void },
+    options?: RunLayoutOptions,
   ): Promise<LayoutResult | null>;
-  /** Stops an evolving layout early; it finishes with the best layout so far. */
+  /** Stops an evolving (or growing) layout early; it finishes with the best layout so far. */
   stopLayout(): void;
   /** Crossings, edges through or near nodes, and overlaps of the graph as drawn now. */
   measure(clearance?: number): LayoutQuality | null;
@@ -290,7 +298,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
   async function runLayout(
     name: LayoutName,
     ids?: string[],
-    options: { evolve?: Partial<EvolveSettings>; clearance?: number; onProgress?(progress: LayoutProgress): void } = {},
+    options: RunLayoutOptions = {},
   ): Promise<LayoutResult | null> {
     const cy = cyRef.current;
     // Hidden nodes stay where they are; clusters follow their members.
@@ -342,6 +350,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, Props>(function GraphCa
     try {
       result = await computeLayout(cy, nodes, name, {
         evolve: options.evolve,
+        insert: options.insert,
         clearance: options.clearance,
         onProgress: preview,
         signal: abort.signal,

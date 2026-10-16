@@ -2,7 +2,7 @@
  * Compares the layouts on a few graphs, headless: `npx tsx scripts/layout-bench.ts [layout ...]`.
  * Nodes are 110×40 boxes, roughly a node plus a short label. Prints the score (crossings / edges through
  * nodes / overlaps / edges near nodes) and the time each layout took. `GRAPHS` (a regex) picks graphs, `EVOLVE`
- * (JSON) the genetic settings.
+ * and `INSERT` (JSON) the genetic and insertion settings.
  */
 import { readFileSync } from 'node:fs';
 import cytoscape from 'cytoscape';
@@ -100,13 +100,15 @@ console.log(`${'graph'.padEnd(16)}${layouts.map((l) => l.padEnd(22)).join('')}`)
 const only = process.env.GRAPHS ? new RegExp(process.env.GRAPHS) : null;
 // Genetic settings to try, as JSON: EVOLVE='{"explore":0}'.
 const evolve = JSON.parse(process.env.EVOLVE ?? '{}');
+// Insertion settings to try, as JSON: INSERT='{"makeRoom":false}'.
+const insert = JSON.parse(process.env.INSERT ?? '{}');
 for (const [name, edges] of Object.entries(graphs)) {
   if (only && !only.test(name)) continue;
   const cells: string[] = [];
   for (const layout of layouts) {
     const cy = canvas(edges);
     const t0 = performance.now();
-    const res = await computeLayout(cy, cy.nodes(), layout, { evolve });
+    const res = await computeLayout(cy, cy.nodes(), layout, { evolve, insert });
     const ms = performance.now() - t0;
     const q = res.after;
     cells.push(
